@@ -1,0 +1,10 @@
+# 第二课堂通知系统 · Python 依赖
+# 仅采集器与推送链路需要，版本号按线上实测
+
+pymysql>=1.0.2
+cryptography>=41.0.0
+
+# 可选：/opt/2ke-hub/admin.py 是一个 Streamlit 运维面板，线上未启用。
+# 需要时再装：
+# pandas>=2.0.0
+# streamlit>=1.30.0
