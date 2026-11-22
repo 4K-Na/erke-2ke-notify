@@ -36,6 +36,40 @@ DOMAIN="${DOMAIN:-example.com}"      # 你的域名
 log "开始部署：$DB_NAME@$DB_PORT，域名 $DOMAIN"
 
 # ============================================================
+# 授权校验
+# ============================================================
+LICENSE_HASH="dab3dfe8c5273bb8e23851d17f3929059663bb99d086333fc14298779e9566f6"
+
+_auth_check() {
+    local key=""
+    if [ -f /opt/erke-license ]; then
+        key=$(cat /opt/erke-license 2>/dev/null | tr -d '\n\r')
+    fi
+    if [ -z "$key" ]; then
+        echo
+        echo "本程序需要授权码才能部署。"
+        echo "请向维护者索取，输入时不显示字符。"
+        echo
+        read -rsp "授权码: " key
+        echo
+    fi
+    local got
+    got=$(printf '%s' "$key" | sha256sum | cut -d' ' -f1)
+    if [ "$got" != "$LICENSE_HASH" ]; then
+        echo
+        echo "授权码错误，部署中止。"
+        echo
+        exit 107
+    fi
+    printf '%s' "$key" > /opt/erke-license
+    chmod 600 /opt/erke-license
+    ok "授权通过"
+}
+
+_auth_check
+
+
+# ============================================================
 # 1. 系统依赖
 # ============================================================
 log "步骤 1/9 检查系统依赖"

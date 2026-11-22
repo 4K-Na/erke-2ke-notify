@@ -74,3 +74,8 @@ data/
 02-配置/etc/logrotate.d/ufw
 02-配置/etc/logrotate.d/unattended-upgrades
 02-配置/etc/logrotate.d/wtmp
+
+# ── 授权文件（含明文授权码）──
+erke-license
+*.license
+license-key*

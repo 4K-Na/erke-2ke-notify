@@ -699,5 +699,39 @@ def main():
     return 0
 
 
+# ─────────────────────────────────────────────────────────────
+# 授权校验：没有有效授权文件就不运行
+# ─────────────────────────────────────────────────────────────
+_LICENSE_FILE = "/opt/erke-license"
+_LICENSE_HASH = "dab3dfe8c5273bb8e23851d17f3929059663bb99d086333fc14298779e9566f6"
+
+
+def _require_license():
+    """启动前校验授权。校验不过直接退出，不产生任何副作用。"""
+    import hashlib as _hl
+    if not os.path.exists(_LICENSE_FILE):
+        sys.stderr.write(
+            "\n[授权] 未找到授权文件 " + _LICENSE_FILE + "\n"
+            "       本程序未授权运行，请联系维护者获取授权码。\n\n")
+        sys.exit(107)
+    try:
+        with open(_LICENSE_FILE, "r", encoding="utf-8") as _f:
+            _key = _f.read().strip()
+    except Exception:
+        sys.stderr.write("\n[授权] 授权文件无法读取\n\n")
+        sys.exit(107)
+    if not _key:
+        sys.stderr.write("\n[授权] 授权文件为空\n\n")
+        sys.exit(107)
+    if _hl.sha256(_key.encode("utf-8")).hexdigest() != _LICENSE_HASH:
+        sys.stderr.write(
+            "\n[授权] 授权码无效\n"
+            "       请联系维护者获取正确的授权码。\n\n")
+        sys.exit(107)
+
+
+_require_license()
+# ─────────────────────────────────────────────────────────────
+
 if __name__ == "__main__":
     sys.exit(main())
