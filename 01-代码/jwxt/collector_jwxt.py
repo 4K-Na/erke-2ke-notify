@@ -433,7 +433,19 @@ def push_new_lectures(c, st, new_rows):
         subs = cur.fetchall()
 
     sent = 0
+    _now = datetime.now()
     for r in new_rows:
+        # 已结束的讲座不推送。
+        # 补齐 /search 的已报名讲座时，历史讲座也会被当成"新增"，
+        # 如果不拦，会给所有人推一年前的活动。
+        _end = dt(r.get("openEndDateTime"))
+        if _end is not None and _end < _now:
+            log("  跳过已结束的讲座 [%s] %s（场次 %s）"
+                % (r.get("id"), (r.get("code") or "")[:20], _end.strftime("%Y-%m-%d")))
+            _record_delivery(c, r["id"], r.get("code") or "", None, None, None,
+                             "skipped", "场次已结束，不推送")
+            continue
+
         content = render_lecture_rich(r)
         for sb in subs:
             name = sb.get("real_name") or sb.get("nickname") or ""
@@ -596,6 +608,35 @@ def main():
     page = data.get("_page_") or {}
     log("接口返回 %d 条（totalRows=%s）" % (len(rows), page.get("totalRows")))
 
+    # ── 补齐已报名的讲座 ──
+    # un-enroll-search 按字面意思只返回"未报名"的讲座：一旦学生报了名，
+    # 这条讲座就从列表里消失，采集不到，下一轮还会被 NOT IN 判成 gone。
+    # /search 返回的是报名记录，讲座信息在 lecture 子对象里（字段结构与主列表一致）。
+    # 注意：applyPerson / student / reportTimes 是个人信息，一律不取。
+    _un_enroll_count = len(rows)
+    try:
+        _mine, _mine_err = fetch("/search", cookie)
+        if _mine is not None:
+            _seen = {r.get("id") for r in rows}
+            _added = 0
+            for _rec in (_mine.get("data") or []):
+                _lec = _rec.get("lecture") or {}
+                _lid = _lec.get("id")
+                if not _lid or _lid in _seen:
+                    continue
+                # /search 里 title 通常是 null，标题在 code 字段
+                if not _lec.get("title"):
+                    _lec["title"] = _lec.get("code")
+                rows.append(_lec)
+                _seen.add(_lid)
+                _added += 1
+            if _added:
+                log("  补充已报名的讲座 %d 条（不在未报名列表里）" % _added)
+        else:
+            log("  /search 取数失败（不影响主流程）：%s" % _mine_err)
+    except Exception as _e:
+        log("  /search 异常（不影响主流程）：%r" % (_e,))
+
     now = datetime.now()
     ins = upd = 0
     new_list = []          # 本轮新入库的讲座（用于推送）
@@ -647,7 +688,7 @@ def main():
         #    第 21 条起全部误标（P0，审计 A 发现）。拿不全 → 跳过标记并告警。
         _page = data.get("_page_") or {}
         _total = _page.get("totalRows")
-        _got = len(rows)
+        _got = _un_enroll_count   # 用原始条数，不把补充进来的算进去
         _complete = (_total is None) or (int(_total) <= _got)
 
         live_ids = [int(r["id"]) for r in rows if r.get("id")]
