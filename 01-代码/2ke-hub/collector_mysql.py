@@ -386,7 +386,7 @@ def main():
 # 授权校验：没有有效授权文件就不运行
 # ─────────────────────────────────────────────────────────────
 _LICENSE_FILE = "/opt/erke-license"
-_LICENSE_HASH = "dab3dfe8c5273bb8e23851d17f3929059663bb99d086333fc14298779e9566f6"
+_LICENSE_HASH = "a11c699d562ed20b628f99f81320b329d6f1f7de0469a5af51ff1eec44df4137"
 
 
 def _require_license():
