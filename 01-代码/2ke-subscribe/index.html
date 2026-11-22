@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>第二课堂有新活动</title>
+<style>
+  :root{
+    --bg:#F0EEE6; --ink:#1F1E1B; --ink2:#706C65; --ink3:#969188;
+    --clay:#C16547; --line:#DAD6CC; --card:#FFFFFF;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{
+    background:var(--bg); color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Helvetica Neue",Arial,sans-serif;
+    padding:40px 28px 32px; max-width:640px; margin:0 auto;
+    -webkit-font-smoothing:antialiased;
+  }
+
+  /* 标题区 */
+  .head{ margin-bottom:34px; }
+  .head h1{
+    font-family:"Songti SC","Noto Serif SC","Source Han Serif SC",Georgia,"Times New Roman",serif;
+    font-size:34px; font-weight:600; letter-spacing:.5px; line-height:1.25; color:var(--ink);
+  }
+  .head p{ font-size:15px; color:var(--ink2); margin-top:12px; letter-spacing:.2px; }
+
+  /* 二维码卡片 */
+  .qrs{ display:flex; gap:16px; }
+  .qr-card{
+    flex:1 1 0; min-width:0; background:var(--card);
+    border:1px solid var(--line); border-radius:14px;
+    padding:16px 14px 14px; text-align:center;
+  }
+  .qr-card img{ width:100%; height:auto; display:block; border-radius:4px; }
+  .qr-label{
+    margin-top:12px; font-size:13px; color:var(--ink2); letter-spacing:.3px;
+  }
+  .qr-label .no{ color:var(--ink3); margin-right:4px; }
+  .qr-exp{ margin-top:5px; font-size:11px; color:#B3AEA4; letter-spacing:.2px; }
+  .off-txt{ display:flex; flex-direction:column; justify-content:center; align-items:center;
+            aspect-ratio:1; font-size:14px; color:var(--ink2); line-height:1.8; }
+  .off-txt span{ font-size:12px; color:var(--ink3); }
+
+  /* 提示条 */
+  .notice{ display:flex; gap:12px; margin-top:30px; }
+  .notice .bar{ width:3px; background:var(--clay); border-radius:2px; flex:0 0 3px; }
+  .notice .txt{
+    font-family:"Songti SC","Noto Serif SC","Source Han Serif SC",Georgia,serif;
+    font-size:22px; font-weight:600; color:var(--clay); letter-spacing:.5px; line-height:1.3;
+  }
+  .sub-line{ font-size:15px; color:var(--ink2); margin-top:16px; padding-left:15px; letter-spacing:.2px; }
+
+  /* 底部 */
+  .foot{
+    margin-top:38px; padding-top:16px; border-top:1px solid var(--line);
+    display:flex; justify-content:space-between; align-items:baseline;
+    font-size:12px; color:var(--ink3); line-height:1.7;
+  }
+  .foot .right{ text-align:right; color:#B3AEA4; }
+
+  /* 帮助（默认收起，不影响主视觉） */
+  details{ margin-top:22px; }
+  summary{
+    font-size:12px; color:var(--ink3); cursor:pointer; list-style:none;
+    outline:none; -webkit-tap-highlight-color:transparent;
+  }
+  summary::-webkit-details-marker{ display:none; }
+  summary:after{ content:" ›"; }
+  details[open] summary:after{ content:" ⌄"; }
+  .help{ margin-top:10px; font-size:12.5px; color:var(--ink2); line-height:1.9; }
+  .help b{ color:var(--ink); font-weight:600; }
+  .help .step{ margin-bottom:6px; }
+
+  @media (max-width:360px){
+    body{ padding:30px 18px 24px; }
+    .head h1{ font-size:29px; }
+    .qrs{ gap:10px; }
+    .qr-card{ padding:12px 10px 10px; }
+    .notice .txt{ font-size:19px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="head">
+  <h1>第二课堂有新活动</h1>
+  <p>第一时间推到你微信</p>
+</div>
+
+<div class="qrs">
+  <div class="qr-card">
+    <img src="join.png" alt="加入企业微信">
+    <div class="qr-label"><span class="no">①</span>加入企业微信</div>
+  </div>
+  <div class="qr-card" id="card2">
+    <img src="plugin.png" alt="关注微信插件" id="pluginImg">
+    <div class="qr-label"><span class="no">②</span>关注微信插件</div>
+    <div class="qr-exp">码有效期至 <span id="exp">—</span></div>
+  </div>
+  <div class="qr-card" id="card2off" style="display:none">
+    <div class="off-txt">码已过期<br><span>新同学请找管理员<br>要最新的码</span></div>
+  </div>
+</div>
+
+<div class="notice">
+  <div class="bar"></div>
+  <div class="txt">两步都要扫完</div>
+</div>
+<div class="sub-line">先扫左边填实名，审核通过后再扫右边</div>
+
+<details>
+  <summary>扫不出来？</summary>
+  <div class="help">
+    <div class="step"><b>①</b> 用微信「扫一扫」，不要用企业微信扫码。</div>
+    <div class="step"><b>②</b> 右边码过期时：先扫左边加入，然后打开<b>微信 → 通讯录 → 我的企业 → 第二课堂</b>，点进去就能收到通知。</div>
+    <div class="step"><b>③</b> 还是不行就找发这张码的人要新的。</div>
+  </div>
+</details>
+
+<div class="foot">
+  <div>个人搭建 · 非官方<br>以第二课堂官网为准</div>
+  <div class="right">作者 lzy<br><span id="upd"></span></div>
+</div>
+
+<script>
+  // 页面自身二维码的最后更新时间（由刷新脚本写入头部，这里只显示页面构建日）
+  (function () {
+    var d = new Date(document.lastModified);
+    if (isNaN(d.getTime())) return;
+    var p = function (n) { return String(n).padStart(2, '0'); };
+    document.getElementById('upd').textContent =
+      '码更新于 ' + (d.getMonth() + 1) + '-' + p(d.getDate());
+    fetch('/qr-expiry', { cache: 'no-store' })
+      .then(function (r) { return r.ok ? r.text() : ''; })
+      .then(function (t) {
+        var m = String(t).trim().match(/^\d{4}-(\d{2})-(\d{2})$/);
+        var el = document.getElementById('exp');
+        if (el) el.textContent = m ? (Number(m[1]) + '-' + m[2]) : '7 天';
+        if (m) {
+          var today = new Date(); today.setHours(0,0,0,0);
+          var expDate = new Date(today.getFullYear(), Number(m[1]) - 1, Number(m[2]));
+          if (expDate.getTime() < today.getTime() - 180 * 86400000) expDate.setFullYear(expDate.getFullYear() + 1);
+          if (expDate.getTime() < today.getTime()) {
+            var c2 = document.getElementById('card2'), c2off = document.getElementById('card2off');
+            if (c2 && c2off) { c2.style.display = 'none'; c2off.style.display = ''; }
+          }
+        }
+      })
+      .catch(function () {});
+  })();
+</script>
+</body>
+</html>

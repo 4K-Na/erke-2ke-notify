@@ -1,0 +1,17 @@
+[Unit]
+Description=WeCom plugin QR self-service uploader (127.0.0.1:18091)
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/qrbot
+ExecStart=/usr/bin/python3 -u /root/bin/qr-upload.py
+Restart=always
+RestartSec=5
+MemoryMax=200M
+StandardOutput=append:/var/log/qr-upload.log
+StandardError=append:/var/log/qr-upload.log
+
+[Install]
+WantedBy=multi-user.target

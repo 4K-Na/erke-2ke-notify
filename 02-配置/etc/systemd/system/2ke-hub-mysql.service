@@ -1,0 +1,18 @@
+[Unit]
+Description=2ke-hub collector (MySQL -> ry-2ke.t_activity)
+After=network.target ruoyi-mysql.service
+Wants=ruoyi-mysql.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/2ke-hub
+ExecStart=/usr/bin/python3 -u /opt/2ke-hub/collector_mysql.py
+Restart=always
+RestartSec=30
+MemoryMax=256M
+CPUQuota=25%
+SyslogIdentifier=2ke-hub-mysql
+
+[Install]
+WantedBy=multi-user.target

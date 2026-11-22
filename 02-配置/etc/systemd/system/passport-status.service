@@ -1,0 +1,6 @@
+[Unit]
+Description=Passport status JSON snapshot
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/passport-status.sh

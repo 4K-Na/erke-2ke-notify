@@ -1,0 +1,119 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.system.mapper.TNoticeMapper">
+    
+    <resultMap type="TNotice" id="TNoticeResult">
+        <result property="noticeId"    column="notice_id"    />
+        <result property="title"    column="title"    />
+        <result property="content"    column="content"    />
+        <result property="pinned"    column="pinned"    />
+        <result property="validFrom"    column="valid_from"    />
+        <result property="validTo"    column="valid_to"    />
+        <result property="status"    column="status"    />
+        <result property="sortNo"    column="sort_no"    />
+        <result property="createBy"    column="create_by"    />
+        <result property="createTime"    column="create_time"    />
+        <result property="updateBy"    column="update_by"    />
+        <result property="updateTime"    column="update_time"    />
+        <result property="remark"    column="remark"    />
+    </resultMap>
+
+    <sql id="selectTNoticeVo">
+        select notice_id, title, content, pinned, valid_from, valid_to, status, sort_no, create_by, create_time, update_by, update_time, remark from t_notice
+    </sql>
+
+    <select id="selectTNoticeList" parameterType="TNotice" resultMap="TNoticeResult">
+        <include refid="selectTNoticeVo"/>
+        <where>  
+            <!-- 2026-10-23 审计 C 修正（C7）：标题搜索改为模糊匹配，原来精确等值导致后台搜索框几乎搜不到东西 -->
+            <if test="title != null  and title != ''"> and title like concat('%', #{title}, '%')</if>
+            <if test="content != null  and content != ''"> and content = #{content}</if>
+            <if test="pinned != null  and pinned != ''"> and pinned = #{pinned}</if>
+            <if test="validFrom != null "> and valid_from = #{validFrom}</if>
+            <if test="validTo != null "> and valid_to = #{validTo}</if>
+            <if test="status != null  and status != ''"> and status = #{status}</if>
+            <if test="sortNo != null "> and sort_no = #{sortNo}</if>
+        </where>
+    </select>
+    
+    <select id="selectTNoticeByNoticeId" parameterType="Long" resultMap="TNoticeResult">
+        <include refid="selectTNoticeVo"/>
+        where notice_id = #{noticeId}
+    </select>
+
+    <insert id="insertTNotice" parameterType="TNotice" useGeneratedKeys="true" keyProperty="noticeId">
+        insert into t_notice
+        <trim prefix="(" suffix=")" suffixOverrides=",">
+            <if test="title != null and title != ''">title,</if>
+            <if test="content != null">content,</if>
+            <if test="pinned != null">pinned,</if>
+            <if test="validFrom != null">valid_from,</if>
+            <if test="validTo != null">valid_to,</if>
+            <if test="status != null">status,</if>
+            <if test="sortNo != null">sort_no,</if>
+            <if test="createBy != null">create_by,</if>
+            <if test="createTime != null">create_time,</if>
+            <if test="updateBy != null">update_by,</if>
+            <if test="updateTime != null">update_time,</if>
+            <if test="remark != null">remark,</if>
+         </trim>
+        <trim prefix="values (" suffix=")" suffixOverrides=",">
+            <if test="title != null and title != ''">#{title},</if>
+            <if test="content != null">#{content},</if>
+            <if test="pinned != null">#{pinned},</if>
+            <if test="validFrom != null">#{validFrom},</if>
+            <if test="validTo != null">#{validTo},</if>
+            <if test="status != null">#{status},</if>
+            <if test="sortNo != null">#{sortNo},</if>
+            <if test="createBy != null">#{createBy},</if>
+            <if test="createTime != null">#{createTime},</if>
+            <if test="updateBy != null">#{updateBy},</if>
+            <if test="updateTime != null">#{updateTime},</if>
+            <if test="remark != null">#{remark},</if>
+         </trim>
+    </insert>
+
+    <update id="updateTNotice" parameterType="TNotice">
+        update t_notice
+        <trim prefix="SET" suffixOverrides=",">
+            <if test="title != null and title != ''">title = #{title},</if>
+            <if test="content != null">content = #{content},</if>
+            <if test="pinned != null">pinned = #{pinned},</if>
+            <if test="validFrom != null">valid_from = #{validFrom},</if>
+            <if test="validTo != null">valid_to = #{validTo},</if>
+            <if test="status != null">status = #{status},</if>
+            <if test="sortNo != null">sort_no = #{sortNo},</if>
+            <if test="createBy != null">create_by = #{createBy},</if>
+            <if test="createTime != null">create_time = #{createTime},</if>
+            <if test="updateBy != null">update_by = #{updateBy},</if>
+            <if test="updateTime != null">update_time = #{updateTime},</if>
+            <if test="remark != null">remark = #{remark},</if>
+        </trim>
+        where notice_id = #{noticeId}
+    </update>
+
+    <delete id="deleteTNoticeByNoticeId" parameterType="Long">
+        delete from t_notice where notice_id = #{noticeId}
+    </delete>
+
+    <delete id="deleteTNoticeByNoticeIds" parameterType="String">
+        delete from t_notice where notice_id in 
+        <foreach item="noticeId" collection="array" open="(" separator="," close=")">
+            #{noticeId}
+        </foreach>
+    </delete>
+
+    <select id="selectPublicNotices" resultMap="TNoticeResult">
+        select notice_id, title, content, pinned, valid_from, valid_to, status, sort_no, create_time
+        from t_notice
+        where status = '0'
+          and (valid_from is null or valid_from &lt;= now())
+          <!-- 2026-10-23 审计 C 修正（C8）：valid_to 是 datetime，后台只选到日期时落库是当天 00:00:00。
+               原来用 now() 比较，导致「有效期至 11-01」的公告在 11-01 零点整就下架。
+               改成 date(now()) 后，当天任意时刻仍满足 valid_to >= 当天零点，能挂到当天结束。 -->
+          and (valid_to   is null or valid_to   &gt;= date(now()))
+        order by pinned desc, sort_no desc, notice_id desc
+    </select>
+</mapper>

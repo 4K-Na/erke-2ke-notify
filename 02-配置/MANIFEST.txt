@@ -1,0 +1,63 @@
+# 第二课堂通知系统 · 全量备份清单
+备份时间: 2026-11-22 09:41:43 CST
+主机: lzywindowsssss  6.8.0-124-generic
+
+## 数据库
+gen_table	3	16.0
+gen_table_column	63	16.0
+QRTZ_BLOB_TRIGGERS	0	16.0
+QRTZ_CALENDARS	0	16.0
+QRTZ_CRON_TRIGGERS	0	16.0
+QRTZ_FIRED_TRIGGERS	0	16.0
+QRTZ_JOB_DETAILS	0	16.0
+QRTZ_LOCKS	0	16.0
+QRTZ_PAUSED_TRIGGER_GRPS	0	16.0
+QRTZ_SCHEDULER_STATE	0	16.0
+QRTZ_SIMPLE_TRIGGERS	0	16.0
+QRTZ_SIMPROP_TRIGGERS	0	16.0
+QRTZ_TRIGGERS	0	32.0
+sys_config	9	16.0
+sys_dept	10	16.0
+sys_dict_data	29	16.0
+sys_dict_type	10	32.0
+sys_job	3	16.0
+sys_job_log	0	16.0
+sys_logininfor	189	80.0
+sys_menu	113	16.0
+sys_notice	1	16.0
+sys_notice_read	0	32.0
+sys_oper_log	87	144.0
+sys_post	4	16.0
+sys_role	2	16.0
+sys_role_dept	3	16.0
+sys_role_menu	85	16.0
+sys_user	2	16.0
+sys_user_bak_20261023	0	16.0
+sys_user_post	2	16.0
+sys_user_role	2	16.0
+sys_user_role_bak_20261023	0	16.0
+t_activity	300	1456.0
+t_activity_bak_creditfix_20261023	161	464.0
+t_delivery	6470	3264.0
+t_lecture	27	1552.0
+t_lecture_delivery	1714	480.0
+t_notice	0	16.0
+t_subscriber	51	32.0
+
+## 关键计数
+t_activity	390
+t_subscriber	51
+t_delivery	6416
+t_lecture	51
+t_lecture_delivery	1714
+t_notice	1
+
+## 包含的目录
+opt/ruoyi opt/ruoyi-ui opt/2ke-hub opt/jwxt opt/jmu-2ke var/www/2ke-subscribe
+etc/nginx etc/systemd/system etc/logrotate.d + crontab + 运行中服务列表
+
+## 恢复方法
+1) 解包：tar xzf full-*.tar.gz -C /
+2) 数据库：zcat db-ry-2ke.sql.gz | mysql -h127.0.0.1 -P3307 -uroot -p ry-2ke
+3) 重新编译前端/后端见 SYSTEM-档案.md §9
+4) 凭据在 secrets.tar.gz（600）

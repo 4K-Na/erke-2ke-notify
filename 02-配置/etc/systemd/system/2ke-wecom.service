@@ -1,0 +1,19 @@
+[Unit]
+Description=2ke-hub WeCom callback verifier
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/2ke-hub
+ExecStart=/usr/bin/python3 -u /opt/2ke-hub/wecom_verify.py
+Restart=always
+RestartSec=10
+MemoryMax=128M
+CPUQuota=10%
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=2ke-wecom
+
+[Install]
+WantedBy=multi-user.target

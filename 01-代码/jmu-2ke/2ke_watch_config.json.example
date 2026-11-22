@@ -1,0 +1,6 @@
+{
+  "_说明": "服务器端配置。改完执行 systemctl restart jmu-2ke-watch",
+  "wxpusher_spt": "<WXPUSHER_TOKEN>",
+  "wxpusher_app_token": "",
+  "wxpusher_uids": []
+}

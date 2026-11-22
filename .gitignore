@@ -1,0 +1,76 @@
+# ── 凭据（绝不提交）──
+wecom.json
+cas-auth.json
+2ke_cookie.json
+2ke_watch_config.json
+db.json
+push.json
+state.json
+dispatch_state.json
+cookie.txt
+tgc.txt
+*.pem
+*.key
+*.p12
+.env
+.env.*
+
+# 示例文件要保留
+!*.example
+
+# ── 数据库与备份 ──
+*.sql.gz
+*.sqlite
+*.db
+*.tar.gz
+*.zip
+
+# ── 日志 ──
+*.log
+logs/
+
+# ── 依赖与构建产物 ──
+node_modules/
+target/
+dist/
+build/
+__pycache__/
+*.py[cod]
+venv/
+.venv/
+
+# ── 编辑器/系统 ──
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# ── 本地数据 ──
+data/
+*.lock
+
+# ── 密码文件 ──
+*htpasswd*
+*.passwd
+
+# ── 备份目录 ──
+*.bak
+*.bak.*
+*_backup_*
+*.broken
+
+# ── 无关系统配置（只保留本项目相关）──
+02-配置/etc/systemd/system/snap-*
+02-配置/etc/systemd/system/*.mount
+02-配置/etc/logrotate.d/alternatives
+02-配置/etc/logrotate.d/apport
+02-配置/etc/logrotate.d/apt
+02-配置/etc/logrotate.d/bootlog
+02-配置/etc/logrotate.d/btmp
+02-配置/etc/logrotate.d/chrony
+02-配置/etc/logrotate.d/dpkg
+02-配置/etc/logrotate.d/ubuntu-pro-client
+02-配置/etc/logrotate.d/ufw
+02-配置/etc/logrotate.d/unattended-upgrades
+02-配置/etc/logrotate.d/wtmp

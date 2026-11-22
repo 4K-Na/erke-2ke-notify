@@ -1,0 +1,167 @@
+# 项目相关配置
+ruoyi:
+  # 名称
+  name: RuoYi
+  # 版本
+  version: 3.9.2
+  # 版权年份
+  copyrightYear: 2026
+  # 文件路径 示例（ Windows配置D:/ruoyi/uploadPath，Linux配置 /home/ruoyi/uploadPath）
+  # 2026-10-23 审计 C 修正（P2）：原来是 Windows 路径 D:/ruoyi/uploadPath。
+  # 在 Linux 上 new File("D:/ruoyi/uploadPath") 会相对工作目录解析成
+  # /opt/ruoyi/D:/ruoyi/uploadPath —— 上传功能等于废的，而 /profile/** 是 permitAll，
+  # 错位后的静态映射是典型越权读文件入口。改成绝对路径。
+  profile: /opt/ruoyi/uploadPath
+  # 获取ip地址开关
+  addressEnabled: false
+  # 验证码类型 math 数字计算 char 字符验证
+  captchaType: math
+
+# 开发环境配置
+server:
+  # 服务器的HTTP端口，默认为8080
+  port: 18081
+  servlet:
+    # 应用的访问路径
+    context-path: /
+  tomcat:
+    # tomcat的URI编码
+    uri-encoding: UTF-8
+    # 连接数满后的排队数，默认为100
+    accept-count: 100
+    threads:
+      # 并发线程上限：这台机器 druid 只有 20 个连接，200 线程已经足够
+      min-spare: 20
+      max: 200
+
+# 日志配置
+logging:
+  level:
+    com.ruoyi: debug
+    org.springframework: warn
+
+# 用户配置
+user:
+  password:
+    # 密码最大错误次数
+    maxRetryCount: 5
+    # 密码锁定时间（默认10分钟）
+    lockTime: 10
+
+# Spring配置
+spring:
+  # 资源信息
+  messages:
+    # 国际化资源文件路径
+    basename: i18n/messages
+  profiles:
+    active: druid
+  # 文件上传
+  servlet:
+    multipart:
+      # 单个文件大小
+      max-file-size: 10MB
+      # 设置总上传的文件大小
+      max-request-size: 20MB
+  jackson:
+    time-zone: GMT+8
+    date-format: yyyy-MM-dd HH:mm:ss
+  # 服务模块
+  devtools:
+    restart:
+      # 热部署开关
+      enabled: true
+  data:
+    # redis 配置
+    redis:
+      # 地址
+      host: 127.0.0.1
+      # 端口，默认为6379
+      port: 6379
+      # 数据库索引
+      database: 0
+      # 密码
+      password: <REDIS_PASSWORD>
+      
+      timeout: 10s
+      lettuce:
+        pool:
+          # 连接池中的最小空闲连接
+          min-idle: 0
+          # 连接池中的最大空闲连接
+          max-idle: 8
+          # 连接池的最大数据库连接数
+          max-active: 8
+          # #连接池最大阻塞等待时间（使用负值表示没有限制）
+          max-wait: -1ms
+
+# token配置
+token:
+  # 令牌自定义标识
+  header: Authorization
+  # 令牌密钥
+  # 2026-10-23 审计 C 修正（P2）：原来是若依官方文档里的示例值
+  # abcdefghijklmnopqrstuvwxyz —— 等于公开密钥。换成 48 字节随机（base64 后 64 字符）：
+  #   openssl rand -base64 48
+  # 注意：改这一行会让**所有已登录用户的 token 全部失效**（需重新登录），属预期行为。
+  secret: "x98uWNH36YsGAkGh8+VisCELnxiUkeAGJ+zF5/X0H6WMQ42vE0k2m/MAdF1YXc/D"
+  # 令牌有效期（分钟）：2880 = 48 小时（用户要求 2~3 天才需要重登）
+  # 2026-10-23 审计 C 修正（P2）：原来是 10080（7 天）。Redis 无密码，
+  # 2026-10-23 用户要求「两三天才需要登录一次」→ 2880 分钟 = 48 小时。
+  # 若依按比例续期（剩余 < 20 分钟自动续），连续使用不会掉线；满 48 小时不打开才需重登。
+  # 安全侧靠「5 次失败锁 10 分钟 + 登录接口限速 10 次/分钟」兜底（验证码已按用户要求关闭）。
+  expireTime: 2880
+
+# MyBatis配置
+mybatis:
+  # 搜索指定包别名
+  typeAliasesPackage: com.ruoyi.**.domain
+  # 配置mapper的扫描，找到所有的mapper.xml映射文件
+  mapperLocations: classpath*:mapper/**/*Mapper.xml
+  # 加载全局的配置文件
+  configLocation: classpath:mybatis/mybatis-config.xml
+
+# PageHelper分页插件
+pagehelper:
+  helperDialect: mysql
+  supportMethodsArguments: true
+  params: count=countSql
+
+# Springdoc配置
+# 安全：生产环境关闭接口文档。
+# 开着的话 /v3/api-docs 未授权可访问，直接暴露全部 163 个接口的路径、
+# 参数、返回结构，攻击者不用猜就能构造请求。
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+  group-configs:
+    - group: 'default'
+      display-name: '测试模块'
+      paths-to-match: '/**'
+      packages-to-scan: com.ruoyi.web.controller.tool
+
+# 防盗链配置
+referer:
+  # 防盗链开关
+  enabled: false
+  # 允许的域名列表
+  allowed-domains: localhost,127.0.0.1,ruoyi.vip,www.ruoyi.vip
+
+# 防止XSS攻击
+xss:
+  # 过滤开关
+  enabled: true
+  # 排除链接（多个用逗号分隔）
+  # 2026-10-23 审计 C 修正（P2）：原来写的是若依原版路径 /system/notice，
+  # 但本项目公告控制器实际映射是 /system/tnotice（TNoticeController），
+  # 于是 /system/tnotice 命中 urlPatterns 却不在 excludes 里 ——
+  # XssFilter 会对整个 JSON 请求体做 EscapeUtil.clean()，
+  # 后台写公告时 <br> / <a> 被静默改写成 &lt;br&gt; 存库，不报错不提示。
+  # 同时补 /system/tnotice/*：XssFilter 用 servletPath 做 simpleMatch，
+  # POST /system/tnotice/export 的 servletPath 是 /system/tnotice/export，
+  # 只写单条路径会漏掉。
+  excludes: /system/notice,/system/tnotice,/system/tnotice/*
+  # 匹配链接
+  urlPatterns: /system/*,/monitor/*,/tool/*

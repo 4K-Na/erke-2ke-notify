@@ -1,0 +1,7 @@
+{
+  "cookies": [
+    {"name": "SESSION", "value": "<SESSION_COOKIE>"},
+    {"name": "TGC", "value": "<CAS_TGC>"}
+  ],
+  "saved_at": "2026-01-01T00:00:00"
+}

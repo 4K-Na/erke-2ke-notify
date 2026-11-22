@@ -1,0 +1,122 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.system.mapper.TSubscriberMapper">
+    
+    <resultMap type="TSubscriber" id="TSubscriberResult">
+        <result property="subscriberId"    column="subscriber_id"    />
+        <result property="channel"    column="channel"    />
+        <result property="externalId"    column="external_id"    />
+        <result property="nickname"    column="nickname"    />
+        <result property="realName"    column="real_name"    />
+        <result property="className"    column="class_name"    />
+        <result property="keywords"    column="keywords"    />
+        <result property="minCredit"    column="min_credit"    />
+        <result property="onlySchool"    column="only_school"    />
+        <result property="quietHours"    column="quiet_hours"    />
+        <result property="status"    column="status"    />
+        <result property="createBy"    column="create_by"    />
+        <result property="createTime"    column="create_time"    />
+        <result property="updateBy"    column="update_by"    />
+        <result property="updateTime"    column="update_time"    />
+        <result property="remark"    column="remark"    />
+    </resultMap>
+
+    <sql id="selectTSubscriberVo">
+        select subscriber_id, channel, external_id, nickname, real_name, class_name, keywords, min_credit, only_school, quiet_hours, status, create_by, create_time, update_by, update_time, remark from t_subscriber
+    </sql>
+
+    <select id="selectTSubscriberList" parameterType="TSubscriber" resultMap="TSubscriberResult">
+        <include refid="selectTSubscriberVo"/>
+        <where>  
+            <if test="channel != null  and channel != ''"> and channel = #{channel}</if>
+            <if test="externalId != null  and externalId != ''"> and external_id = #{externalId}</if>
+            <if test="nickname != null  and nickname != ''"> and nickname like concat('%', #{nickname}, '%')</if>
+            <if test="realName != null  and realName != ''"> and real_name like concat('%', #{realName}, '%')</if>
+            <if test="className != null  and className != ''"> and class_name like concat('%', #{className}, '%')</if>
+            <if test="keywords != null  and keywords != ''"> and keywords = #{keywords}</if>
+            <if test="minCredit != null "> and min_credit = #{minCredit}</if>
+            <if test="onlySchool != null  and onlySchool != ''"> and only_school = #{onlySchool}</if>
+            <if test="quietHours != null  and quietHours != ''"> and quiet_hours = #{quietHours}</if>
+            <if test="status != null  and status != ''"> and status = #{status}</if>
+        </where>
+        order by create_time desc
+    </select>
+    
+    <select id="selectTSubscriberBySubscriberId" parameterType="Long" resultMap="TSubscriberResult">
+        <include refid="selectTSubscriberVo"/>
+        where subscriber_id = #{subscriberId}
+    </select>
+
+    <insert id="insertTSubscriber" parameterType="TSubscriber" useGeneratedKeys="true" keyProperty="subscriberId">
+        insert into t_subscriber
+        <trim prefix="(" suffix=")" suffixOverrides=",">
+            <if test="channel != null and channel != ''">channel,</if>
+            <if test="externalId != null and externalId != ''">external_id,</if>
+            <if test="nickname != null">nickname,</if>
+            <if test="realName != null">real_name,</if>
+            <if test="className != null">class_name,</if>
+            <if test="keywords != null">keywords,</if>
+            <if test="minCredit != null">min_credit,</if>
+            <if test="onlySchool != null">only_school,</if>
+            <if test="quietHours != null">quiet_hours,</if>
+            <if test="status != null">status,</if>
+            <if test="createBy != null">create_by,</if>
+            <if test="createTime != null">create_time,</if>
+            <if test="updateBy != null">update_by,</if>
+            <if test="updateTime != null">update_time,</if>
+            <if test="remark != null">remark,</if>
+         </trim>
+        <trim prefix="values (" suffix=")" suffixOverrides=",">
+            <if test="channel != null and channel != ''">#{channel},</if>
+            <if test="externalId != null and externalId != ''">#{externalId},</if>
+            <if test="nickname != null">#{nickname},</if>
+            <if test="realName != null">#{realName},</if>
+            <if test="className != null">#{className},</if>
+            <if test="keywords != null">#{keywords},</if>
+            <if test="minCredit != null">#{minCredit},</if>
+            <if test="onlySchool != null">#{onlySchool},</if>
+            <if test="quietHours != null">#{quietHours},</if>
+            <if test="status != null">#{status},</if>
+            <if test="createBy != null">#{createBy},</if>
+            <if test="createTime != null">#{createTime},</if>
+            <if test="updateBy != null">#{updateBy},</if>
+            <if test="updateTime != null">#{updateTime},</if>
+            <if test="remark != null">#{remark},</if>
+         </trim>
+    </insert>
+
+    <update id="updateTSubscriber" parameterType="TSubscriber">
+        update t_subscriber
+        <trim prefix="SET" suffixOverrides=",">
+            <if test="channel != null and channel != ''">channel = #{channel},</if>
+            <if test="externalId != null and externalId != ''">external_id = #{externalId},</if>
+            <if test="nickname != null">nickname = #{nickname},</if>
+            <if test="realName != null">real_name = #{realName},</if>
+            <if test="className != null">class_name = #{className},</if>
+            <if test="keywords != null">keywords = #{keywords},</if>
+            <if test="minCredit != null">min_credit = #{minCredit},</if>
+            <if test="onlySchool != null">only_school = #{onlySchool},</if>
+            <if test="quietHours != null">quiet_hours = #{quietHours},</if>
+            <if test="status != null">status = #{status},</if>
+            <if test="createBy != null">create_by = #{createBy},</if>
+            <if test="createTime != null">create_time = #{createTime},</if>
+            <if test="updateBy != null">update_by = #{updateBy},</if>
+            <if test="updateTime != null">update_time = #{updateTime},</if>
+            <if test="remark != null">remark = #{remark},</if>
+        </trim>
+        where subscriber_id = #{subscriberId}
+    </update>
+
+    <delete id="deleteTSubscriberBySubscriberId" parameterType="Long">
+        delete from t_subscriber where subscriber_id = #{subscriberId}
+    </delete>
+
+    <delete id="deleteTSubscriberBySubscriberIds" parameterType="String">
+        delete from t_subscriber where subscriber_id in 
+        <foreach item="subscriberId" collection="array" open="(" separator="," close=")">
+            #{subscriberId}
+        </foreach>
+    </delete>
+</mapper>

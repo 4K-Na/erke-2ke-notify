@@ -1,0 +1,19 @@
+[Unit]
+Description=WeCom admin QR bot (keeps live login QR + auto-captures plugin QR every 6h)
+After=network.target qr-upload.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/qrbot
+Environment=PLAYWRIGHT_BROWSERS_PATH=/root/.cache/ms-playwright
+ExecStart=/usr/bin/node /root/bin/qr-bot.js
+Restart=always
+RestartSec=10
+MemoryMax=750M
+MemoryHigh=650M
+StandardOutput=append:/root/qrbot/bot.log
+StandardError=append:/root/qrbot/bot.log
+
+[Install]
+WantedBy=multi-user.target

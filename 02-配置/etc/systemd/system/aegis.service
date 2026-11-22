@@ -1,0 +1,18 @@
+[Unit]
+Description=Aegis Service
+After=network.target
+
+[Service]
+Type=forking
+Restart=no
+TimeoutSec=30
+IgnoreSIGPIPE=no
+KillMode=process
+GuessMainPID=no
+Delegate=cpu memory
+ExecStart=/usr/local/aegis/aegis_update/AliYunDunUpdate
+ExecStop=/usr/local/aegis/globalcfg/aegis_info -c
+
+[Install]
+WantedBy=multi-user.target graphical.target
+

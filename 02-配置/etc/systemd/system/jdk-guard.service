@@ -1,0 +1,7 @@
+[Unit]
+Description=Detect JDK binary change and restart ruoyi-app if stale
+After=network.target
+
+[Service]
+Type=oneshot
+ExecStart=/root/bin/jdk-guard.sh

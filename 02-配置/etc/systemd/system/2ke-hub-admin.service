@@ -1,0 +1,27 @@
+[Unit]
+Description=2ke-hub admin console (Streamlit)
+After=network-online.target 2ke-hub-collector.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=jmu2ke
+Group=jmu2ke
+WorkingDirectory=/opt/2ke-hub
+ExecStart=/opt/2ke-hub/venv/bin/streamlit run /opt/2ke-hub/admin.py \
+    --server.address 127.0.0.1 \
+    --server.port 8501 \
+    --server.headless true \
+    --server.enableCORS false \
+    --server.enableXsrfProtection false \
+    --browser.gatherUsageStats false
+Restart=always
+RestartSec=10
+SyslogIdentifier=2ke-hub-admin
+MemoryMax=400M
+Nice=10
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

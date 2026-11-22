@@ -1,0 +1,32 @@
+[Unit]
+Description=JMU 2ke new-activity watcher (polls /dashboard every 8 min)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=jmu2ke
+Group=jmu2ke
+WorkingDirectory=/opt/jmu-2ke
+ExecStart=/usr/bin/python3 -u /opt/jmu-2ke/jmu_2ke_watch.py
+Restart=always
+RestartSec=30
+SyslogIdentifier=jmu-2ke
+StandardOutput=journal
+StandardError=journal
+
+# —— 按你的 IOPS 顾虑做的限制 ——
+Nice=10
+CPUQuota=10%
+MemoryMax=160M
+IOWeight=10
+# 只允许写自己的工作目录，其余文件系统只读
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/opt/jmu-2ke
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target
+

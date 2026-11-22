@@ -1,0 +1,45 @@
+  2ke-dispatcher.service        loaded active running 2ke-hub dispatcher (activity -> WeCom push)
+  2ke-hub-mysql.service         loaded active running 2ke-hub collector (MySQL -> ry-2ke.t_activity)
+  2ke-wecom.service             loaded active running 2ke-hub WeCom callback verifier
+  acac.service                  loaded active running ACAC home air conditioner cloud service
+  aliyun.service                loaded active running Aliyun Assist
+  atd.service                   loaded active running Deferred execution scheduler
+  BT-FirewallServices.service   loaded active running Firewall and System Event Listener Service
+  chrony.service                loaded active running chrony, an NTP client/server
+  containerd.service            loaded active running containerd container runtime
+  cron.service                  loaded active running Regular background program processing daemon
+  dbus.service                  loaded active running D-Bus System Message Bus
+  docker.service                loaded active running Docker Application Container Engine
+  fail2ban.service              loaded active running Fail2Ban Service
+  fwupd.service                 loaded active running Firmware update daemon
+  getty@tty1.service            loaded active running Getty on tty1
+  hbrclient.service             loaded active running Alibaba Cloud Backup Service
+  hbrclientupdater.service      loaded active running Alibaba Cloud Backup Update Service
+  mihomo.service                loaded active running Mihomo proxy service
+  ModemManager.service          loaded active running Modem Manager
+  mysql-personal-growth.service loaded active running MySQL for Personal Growth Archive
+  mysqld.service                loaded active running LSB: start and stop MySQL
+  networkd-dispatcher.service   loaded active running Dispatcher daemon for systemd-networkd
+  nginx.service                 loaded active running A high performance web server and a reverse proxy server
+  personal-growth.service       loaded active running Personal Growth Archive API
+  php-fpm-82.service            loaded active running LSB: starts php-fpm
+  polkit.service                loaded active running Authorization Manager
+  qr-upload.service             loaded active running WeCom plugin QR self-service uploader (127.0.0.1:18091)
+  redis-personal-growth.service loaded active running Redis for Personal Growth Archive
+  rsyslog.service               loaded active running System Logging Service
+  ruoyi-app.service             loaded active running RuoYi-Vue backend (2ke notification admin)
+  ruoyi-mysql.service           loaded active running RuoYi dedicated MySQL 5.7 (port 3307)
+  ruoyi-redis.service           loaded active running RuoYi dedicated Redis (port 6379)
+  serial-getty@ttyS0.service    loaded active running Serial Getty on ttyS0
+  site_total.service            loaded active running Site Total Service
+  snapd.service                 loaded active running Snap Daemon
+  ssh.service                   loaded active running OpenBSD Secure Shell server
+  systemd-journald.service      loaded active running Journal Service
+  systemd-logind.service        loaded active running User Login Management
+  systemd-networkd.service      loaded active running Network Configuration
+  systemd-resolved.service      loaded active running Network Name Resolution
+  systemd-udevd.service         loaded active running Rule-based Manager for Device Events and Files
+  tempre-monitor.service        loaded active running Tempre Monitor Node Service
+  udisks2.service               loaded active running Disk Manager
+  unattended-upgrades.service   loaded active running Unattended Upgrades Shutdown
+  user@1003.service             loaded active running User Manager for UID 1003

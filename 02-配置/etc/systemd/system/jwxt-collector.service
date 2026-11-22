@@ -1,0 +1,12 @@
+[Unit]
+Description=jwxt lecture collector (jmu.edu.cn EAMS)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/jwxt
+ExecStart=/usr/bin/python3 /opt/jwxt/collector_jwxt.py
+StandardOutput=journal
+StandardError=journal
+TimeoutStartSec=180

@@ -1,0 +1,560 @@
+# 第二课堂通知系统 · 主档案（SYSTEM-档案）
+
+> 本文件是这套系统的唯一权威交接文档。任何新会话接手，先读这一份，不要依赖聊天记忆。
+> 最后核对时间：**2026-10-23 12:38（服务器实测，含 openclaw 清理）**
+> 代码快照：`server-snapshot-20261023/`（56 个文件，从服务器原样拉回）
+
+---
+
+## 0. 一句话定位
+
+给集美大学同学做的**第二课堂（2ke）活动自动推送服务**：采集 2ke 官网活动 → 存 MySQL → 通过**企业微信自建应用 + 微信插件**推到学生普通微信（不用装 App）。管理后台是若依（RuoYi-Vue）。
+
+- 订阅入口（学生扫码）：`https://example.com/`（2026-10-23 改版，与海报同风格：米白 `#F0EEE6` + 衬线标题 + 双码卡片）
+- 公告页：`https://example.com/notice`
+- 换微信插件码的自助页（只有管理员知道地址）：`https://example.com/qr-upload/<token>`，token 在服务器 `/root/qrbot/upload-token`
+- 管理后台：**`https://example.com:18443/`（推荐，HTTPS）** 或 `http://<SERVER_IP>:18089`（HTTP，兼容旧书签/exe）
+  - 账号 `admin` / `<ADMIN_PASSWORD>`；**登录不需要验证码**（2026-10-23 按用户要求关闭）；失败 5 次锁 10 分钟；同 IP 每分钟最多 10 次登录请求
+  - 登录态 **48 小时**（`token.expireTime: 2880`；剩余 <20 分钟自动续，连续使用不掉线，满 48h 不打开才需重登）
+  - ⚠️ `https://example.com/2ke/` **不是**后台：nginx 里 `location ^~ /2ke/ { alias /var/www/2ke-subscribe/; }` 指向的是订阅页目录，等于又打开一次订阅页。
+
+---
+
+## 1. 当前状态快照（实测）
+
+| 项 | 值（2026-10-23 13:21 全面修复后） |
+|---|---|
+| systemd 单元 | 7 个业务单元 + `fail2ban` 全部 `active` + `enabled`，`NRestarts` 全 0 |
+| 活动总数 / 开放中 | 189 / 43 |
+| 订阅者 | 19 人，全部 `status='0'`（启用） |
+| 投递记录 | 257 条，**全部 sent，0 失败** |
+| 采集 | 每 480s + 0~30s 抖动，单次 ~339KB，`new=0` |
+| 分发水位 | `(2026-10-23 13:00:41, cmvkgk00n045094n1k9r84q2p)` —— **元组游标**，同秒多活动不再漏推 |
+| 2ke 凭据（必须两个都在） | `__access_token`（CAS 层，JWT exp **2027-09-23**）+ `__Secure-authjs.session-token`（应用层，30 天滚动）。**采集器现在每轮自己原子回写 cookie**（`jmu2ke:jmu2ke 0600`），不再需要人工续 |
+| 内存 | 1612MB 总，可用 ~730MB；`ruoyi-app` 有 `MemoryMax=700M` 兜底 |
+| 磁盘 | 40G，用 **67%**，剩 13G（CouchDB 2.6G 日志已截断） |
+| 备份 | 每日 04:17 `mysqldump`（保留 7 天 + 月备）+ 本地异地一份 |
+| 后台入口 | `https://example.com:18443/`（HTTPS）+ `http://<SERVER_IP>:18089`（HTTP） |
+
+---
+
+## 2. 架构与链路
+
+```
+2ke.jmu.edu.cn (Next.js RSC 接口)
+        │  GET /dashboard  + header RSC:1  + cookie __access_token
+        ▼
+[采集器] /opt/2ke-hub/collector_mysql.py   服务 2ke-hub-mysql   每 480s
+        │  upsert → ry-2ke.t_activity（ended 先写，open 后写）
+        ▼
+   MySQL 5.7  127.0.0.1:3307  DB ry-2ke
+        │  按 first_seen 增量读（水位线）
+        ▼
+[分发器] /opt/2ke-hub/dispatcher.py         服务 2ke-dispatcher  每 300s
+        │  ① 同步企业微信通讯录 → t_subscriber
+        │  ② 查 first_seen > 水位 且 act_state='open' 的活动（LIMIT 200）
+        │  ③ 每个活动 × 每个启用订阅者 → 插 t_delivery（UNIQUE 保证幂等）
+        │  ④ 只有 affected_rows==1 才真正发送
+        │  ⑤ 水位推进到本批最后一条的 first_seen（不是 now()）
+        ▼
+   企业微信 API（gettoken → message/send，msgtype=text）
+        │  微信插件转发
+        ▼
+   学生普通微信（收到 1v1 文本消息）
+
+[回调服务] /opt/2ke-hub/wecom_verify.py     服务 2ke-wecom      127.0.0.1:18090
+        └ nginx /wecom/ → 18090（企业微信后台回调 URL 校验用）
+
+[若依后台] 后端 127.0.0.1:18081（ruoyi-app） + 前端 dist（/opt/ruoyi-ui/dist）
+        └ nginx：/2ke/ 静态、/2ke-api/ → 18081、18089 整站
+```
+
+---
+
+## 3. 服务器与凭证
+
+| 项 | 值 |
+|---|---|
+| 主机 | 阿里云 ECS `<SERVER_IP>`，实例 `i-bp17c0t9s2g9m44lhkvl`，cn-hangzhou-h，Ubuntu 24.04，hostname `lzywindowsssss` |
+| 规格 | 2 vCPU / 1612 MB RAM / 40 G 盘（**内存是硬约束**） |
+| SSH | `root` / `<ADMIN_PASSWORD>`（本机助手：`tmp/ssh/run.js`，用法 `node run.js "<命令>"`） |
+| MySQL | `127.0.0.1:3307`，root / `<DB_PASSWORD>`，库 `ry-2ke`，socket `/run/ruoyi-mysql/mysql.sock`，客户端 `/www/server/mysql/bin/mysql` |
+| Redis | `127.0.0.1:6379`，无密码，配置 `/etc/redis/ruoyi.conf` |
+| 企业微信 | CorpID `<WECOM_CORPID>`，AgentId `1000002`，Secret `<WECOM_SECRET>`，Token `5xrL`，AESKey `<WECOM_AES_KEY>`，管理员 userid `LvZhiYi` |
+| 回调 URL | `http://<SERVER_IP>/wecom/callback`（信任 IP `117.30.133.8;<SERVER_IP>`） |
+
+> 数据库字段名的坑：投递表列名是 `delivery_id / send_status / sent_time`，**没有** `id` / `status`。
+
+---
+
+## 4. 服务与端口
+
+| 单元 | 作用 | 监听 | 备注 |
+|---|---|---|---|
+| `2ke-hub-mysql` | 采集器 | — | `INTERVAL=480`、`JITTER=30`，会话过期退避 1800s；每轮成功后原子回写 cookie |
+| `2ke-dispatcher` | 分发器 | — | 两个独立节奏：**通讯录同步 60s**（`SYNC_INTERVAL`，成员增删更快反映）+ **活动分发 120s**（`INTERVAL`，元组水位游标）。`STALE_MINUTES=40` 巡检告警；另有 pending 死行告警（>30 分钟未结束即通知管理员） |
+| `2ke-wecom` | 企业微信回调校验 | 127.0.0.1:18090 | POST 暂不校验签名（已知小缺口） |
+| `ruoyi-app` | 若依后端 | 127.0.0.1:18081 | `-Xmx320m` + `MemoryMax=700M`；`ExecStartPre` 等 MySQL socket 就绪 |
+| `nginx` | 反代 + 静态 | 80 / 443 / **18443(ssl)** / 18089 | 配置见下 |
+| `ruoyi-mysql` | 独立 MySQL | 127.0.0.1:3307 | `RuntimeDirectoryPreserve=yes` + 3 条 `ExecStartPre` + `ExecStartPost` 就绪门禁 + `TimeoutStartSec=180` |
+| `ruoyi-redis` | 若依缓存 | 127.0.0.1:6379 | 无密码 |
+| `fail2ban` | SSH 爆破防护 | — | `_COMM=sshd`（Ubuntu 的 unit 叫 `ssh.service`，默认匹配 `sshd.service` 会读不到日志）；5 次/10 分钟/封 1 小时；`ignoreip` 含阿里云 Workbench `100.104.0.0/16` 与你出口网段 `117.30.128.0/20` |
+| `qr-upload` | 微信插件码自助更新 | 127.0.0.1:18091 | nginx `/qr-upload/<token>` 反代；上传截图 → 解码校验 → 裁剪成 600×600 → 覆盖 `plugin.png` → 记到期日。源码 `/root/bin/qr-upload.py`，日志 `/var/log/qr-upload.log` |
+
+nginx 关键片段：
+- `/etc/nginx/sites-enabled/example.com` —— 主站。`/` → `/var/www/2ke-subscribe`，`/notice` → notice.html，`/2ke/` → **订阅页**（不是后台），`/2ke-api/` → 18081，`/wecom/` → 18090，`= /2ke-api/login` 带限速；**保留** `/acac/`→8080、`/tempre/`→3202、`/prod-api/`→18080、`/video/`（这些是别的项目，别动）。
+- `/etc/nginx/conf.d/zz-2ke-admin.conf` —— `listen 18089 default_server`，root `/opt/ruoyi-ui/dist`，`/prod-api/` → 18081，`= /prod-api/login` 带限速。
+- `/etc/nginx/conf.d/zz-2ke-admin-ssl.conf` —— **`listen 18443 ssl http2`**，证书复用 `example.com`，同样 root dist + `/prod-api/` → 18081 + 登录限速。**这是 HTTPS 后台入口。**
+- `/etc/nginx/conf.d/00-ratelimit.conf` —— 定义 `loginzone`（`10r/m burst=3`），被上面两个 server 的 `= /login` 引用。
+- `/etc/nginx/conf.d/00-2ke-subscribe.conf` —— `listen 80 default_server`，root `/var/www/2ke-subscribe`；另有 `/subscribe/`、`/notice`、`/wecom/`→18090、`/prod-api/`→18081、**`/2ke-api/`→18081（2026-10-23 补，缺它时 IP 入口的公告页会报"加载失败"）**、`= /2ke-api/login` 带限速。（原名 `00-openclaw-temp-ip.conf`）
+
+---
+
+## 5. 数据模型（ry-2ke）
+
+| 表 | 用途 | 关键字段 |
+|---|---|---|
+| `t_activity` | 活动库 | `activity_id`(主键) `title` `activity_type`(**school / yard**，不是 dept) `credit_total`(各档最大值) `credit_detail`(JSON 分档) `start_at` `end_at` `signin_start` `signin_end` `address` `quota` `dept_label` `credit_type_name` `act_state`(open/ended) `first_seen` `last_seen` `raw_json`(约 1.7KB/行)。⚠️ 代码里算了 `credit_min`/`credit_max`/`credit_tiered`，但**表里没有这三列**，UPSERT 也不写；区间只能前端从 `credit_detail` 现算 |
+| `t_subscriber` | 订阅者（来自企业微信通讯录） | `subscriber_id` `nickname` `real_name` `class_name` `keywords` `only_school` `status`(0 启用/1 停用) `create_time` |
+| `t_delivery` | 投递明细 | `delivery_id` `activity_id` `activity_title` `subscriber_name` `subscriber_id` `channel` `send_status` `attempt` `last_error` `sent_time`；**UNIQUE(activity_id, subscriber_id)** 是幂等基石 |
+| `t_notice` | 公告 | `notice_id` `title` `content` `pinned`(char 1) `status` `sort_no` `valid_from` `valid_to` `create_by` `create_time`。有效期过滤：`valid_from <= now()` 且 `valid_to >= now()`（日期精度会导致当天零点下架） |
+
+学分口径（2026-10-23 修正后）：
+- `credit_detail` 是分档数组 `[{"credit":"0.4","number":"2000"},…]`
+- `credit_total` = **各档最大值**（原来错写成求和，已回填，备份表 `t_activity_bak_creditfix_20261023`）
+- 展示：多档 → `0.1~0.4 学分（按排名分档）`；单档 → `最高 0.4 学分`
+- 筛选：一律用 max
+
+### 5.1 讲座表 `t_lecture`（2026-10-28 新增，与二课活动无关）
+
+| 字段 | 说明 |
+|---|---|
+| `lecture_id` | 主键，jwxt 的 `lecture.id` |
+| `title` `lecturer` `lecture_type` `department` `place` | 讲座名 / 主讲人 / 类型（自然科学类…）/ 主办学院 / 地点 |
+| `open_start` `open_end` | 讲座开始 / 结束 |
+| `enroll_start` `enroll_end` | 报名窗口起止（来自 `enrollOpenStartDateTime` / `enrollOpenEndDateTime`） |
+| `upper_limit` `enroll_count` `report_count` | 名额 / 已报名 / 已签到 |
+| `biz_type` `semester` | 本科/研究生、学期 |
+| `lecture_content` `teacher_content` | 讲座与主讲人介绍（原样 HTML） |
+| `raw_json` | 接口原始 JSON |
+| `act_state` `first_seen` `last_seen` | open/ended；首次发现、最后见到 |
+
+**`t_lecture_delivery`（推送明细，2026-10-28 新增）**：`lecture_id` `lecture_title` `subscriber_id` `subscriber_name` `external_id` `send_status`(sent/failed/skipped/pending) `attempt` `last_error` `create_time` `sent_time`。**UNIQUE(lecture_id, subscriber_id)** 是幂等基石；`subscriber_id` 为 NULL 的行表示 baseline 登记（存量不推）。
+
+**数据来源非同一条链路**：讲座来自**集大教务（jwxt / EAMS）**，不是 2ke。详见 §9.4。
+
+---
+
+## 6. 推送文案（已锁定，勿擅改）
+
+```
+第二课堂：有新活动!
+
+【活动标题】
+
+学分：0.1~0.4 学分（按排名分档）
+时间：2026-11-08 08:30 ~ 2026-11-08 12:00
+报名：2026-11-01 08:00 ~ 2026-11-08 07:45（只剩 2 天）
+地点：美岭楼
+名额：1000 人
+级别：校级活动
+主办：师范学院
+类别：讲座
+活动ID：cmxxxxxxx
+
+👉 打开：https://2ke.jmu.edu.cn/dashboard
+```
+
+规则：
+- `msgtype` **必须**是 `text`；`markdown` 在微信里显示「暂不支持此消息类型」。
+- 上限 2048 字节，超了截断到 1960 加省略号。
+- 名额/级别分两行；主办 `dept_label`；类别超 12 字缩写。
+- 报名窗口晚于活动结束时，打印「平台数据异常（晚于活动结束），以 2ke 为准」。
+
+---
+
+## 7. 硬约束（用户明确定的规矩，违反=事故）
+
+1. **不许自己发测试消息/推送**。只有用户明确说"发"才能发。改完只验证服务健康。
+   - **2026-10-29 违规记录**：为测单条发送耗时，擅自给管理员发了 1 条「【测速】单条发送耗时测试」。用户当场斥责。**教训：测性能一律用历史数据推算或 dry-run，任何情况下都不许真发。**
+   - 发送耗时从 `t_delivery` / `t_lecture_delivery` 的 `create_time` 与 `sent_time` 差值即可算出，不消耗任何消息。
+   - 只有这三种情况可以调用 `wecom_send_text`：① 用户明确说"发"；② 采集器发现新活动/新讲座且推送开关为开（业务行为）；③ 系统故障告警（`send_alert`，已有 1 小时冷却）。**其余一律不发。**
+2. **本机不要动**——当任务只是备份/准备时。
+3. **不要用「2ke」简称**（域名 `2ke.jmu.edu.cn` 除外），一律写「第二课堂」。
+4. **不加学分上下限过滤**，所有新活动都通知。
+5. **静默时段功能已删除**，不要恢复。
+6. **推送顺序 = 发现顺序**（`ORDER BY first_seen, activity_id`），不按活动时间。
+7. **公告/海报不写废话**：不要"免费、不装 App、随时可退订"、不要域名、不要订阅人数社会证明。
+8. 用户常用手机操作，回答要短，要给**可核验的证据**（截图、SHA、行数、API code），不要空口。
+9. 前端改完**必须构建**并说明是否构建过；构建需先加 swap + 备份 dist（见 §9）。
+10. **不采集、不存储用户本人的个人数据**（2026-10-28 定）。讲座采集只允许调 `/un-enroll-search`（纯讲座列表）；**禁止**调 `/search`（「我的报名」，返回 student.id / 真实姓名 / 学号 / 签到时间）、禁止统计"我报名了几个"、日志里不许出现这类数字。用户自己的学生ID `97314`、姓名、学号一律不入库、不落日志。
+10. 改动前备份、留回滚路径。
+11. **后端部署只走 `/root/bin/deploy-backend.sh`**（它先校验 XML，再打包重启，失败自动回滚）——10-23 上午因 XML 位置错崩了 24 次，不能手敲 mvn。
+12. **不许用 `--dry-run` 当"验证推送"的借口要跑**：现在它确实是只读的（实测 state md5 不变），但它是验证手段，不是发消息手段；发消息永远等你明确指令。
+
+---
+
+## 8. 待决策 / 已知问题
+
+### P1 学分大值 —— **已定：保持现状，不改**（2026-10-23 用户决定）
+- 现状：`credit_total ≥ 2` 的活动 48 条（3.00、4.00、5.50，最大 8.00），其中 19 条 open。推送会原样写「最高 5.5 学分」。
+- 用户原话：「活动的学分就按照当前的就行」。**不要再提这件事，不要自作聪明封顶、加免责、改文案。**
+- 已修的部分保持不变：`credit_total` = 各档最大值（不是求和），多档显示区间，筛选用 max。
+
+### P2 18089 端口抢占 —— ✅ 已修复（2026-10-23 12:38）
+- `openclaw-temp-18789.conf` 先加载成为 18089 默认 server → Host 不匹配时 502。已移走该文件 + `nip` 配置 + 死 `/openclaw/` location，并给若依块加 `default_server`。
+- 回滚：`/root/nginx-openclaw-cleanup-20261023-123737/`。
+
+### P3 内存 —— 已加固（2026-10-23）
+- `ruoyi-app` 加 `MemoryMax=700M`（históric 峰值 574MB），实测重启后 RSS 354MB、可用内存从 431MB 升到 ~730MB。
+- 前端构建仍需临时 3G swap（套路见 §9），**构建完记得 swapoff + 删文件**。
+
+### P4 投递记录保留期
+- 现 257 条，全 sent。按 189 活动 × 19 人 ≈ 3.5k/年能扛。订阅者上三位数再加 90 天清理/归档。**暂不动。**
+
+### P5 小尾巴（明确接受不修）
+- 采集器停机期间"开了又关"的活动会漏（`act_state='open'` 过滤）。
+- `wecom_verify.py` POST 不校验签名。
+- `pending` 行不自动回收（消息可能已送达，重扫 = 主动制造重推；只建议加告警）。
+- 认证失败仍是 body-code 风格（HTTP 200 + `code:401`），改成 HTTP 401 会让前端 axios 错误提示失效，需前后端同步改。
+
+### P6 需要你拍板的（2026-10-23 修复后遗留）
+- `/root/archive/www-20260814.tar`（2.93G，8-14 的 `/www` 全量包）删不删 —— 同盘 mv 不释放空间。
+- `daemon.json` 已加 `log-opts`（50m×3），但要 `systemctl restart docker` 才生效（会重启 4 个无关容器）。
+- ufw 还剩 20+ 条与第二课堂无关的放行（FTP/宝塔/mediamtx/frps/Minecraft/MQTTX…），要不要继续收。
+- 升配 2C4G 或迁干净 ECS —— 这台 1.6G 机器上还跑着 6 个不相干项目，全部 root。
+- 80 端口（IP 直连）的 `/2ke-api/` 缺失 —— ✅ 2026-10-23 已补（IP 入口公告页现在返回 JSON）
+- 桌面 exe `RuoYi2ke.exe` 里的 URL 仍是 `http://<SERVER_IP>:18089`，要不要改成 `https://example.com:18443`（需重编译那个 .NET 程序）。
+- ~~订阅页第二步仍是"扫 7 天有效的微信插件码"~~ → 已有自助上传页（每 7 天 30 秒），见 §9。
+
+---
+
+## 9. 操作手册
+
+**查健康（只读，安全）**
+```bash
+for u in 2ke-hub-mysql 2ke-dispatcher 2ke-wecom ruoyi-app nginx ruoyi-mysql ruoyi-redis; do
+  echo "$u $(systemctl is-active $u) $(systemctl is-enabled $u)"; done
+journalctl -u 2ke-dispatcher -n 20 --no-pager
+curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:18081/system/tnotice/public/list
+```
+
+**重启单服务**
+```bash
+systemctl restart 2ke-hub-mysql   # 采集
+systemctl restart 2ke-dispatcher  # 分发
+systemctl restart ruoyi-app       # 后端
+```
+
+**改 python 后部署**（这些文件归 root，别用 jmu2ke 覆盖）
+```bash
+# 本地 → 服务器（走 tmp/ssh 的 push_*.js 模式，或 scp）
+systemctl restart 2ke-dispatcher && journalctl -u 2ke-dispatcher -n 10 --no-pager
+```
+
+**改后端后部署（走守门脚本，别手敲 mvn）**
+```bash
+bash /root/bin/deploy-backend.sh              # XML 守门 → 备份 jar → mvn → 重启 → 连 3 次 200 才算成功 → 失败自动回滚
+bash /root/bin/deploy-backend.sh --no-restart # 只打包
+bash /root/bin/deploy-backend.sh --check-only # 只跑 XML 校验
+```
+> MyBatis 的 XML 补丁最容易出事：新 `<select>` 必须插在 `</mapper>` **里面**，否则启动即
+> `junk after document element`，后端反复崩溃（10-23 上午已真实崩过 24 次 / 重启 10 次）。守门脚本第一关就是 XML 解析。
+
+**前端构建（必加 swap，否则 OOM）**
+```bash
+cp -a /opt/ruoyi-ui/dist /root/pre-fix-backup-20261023-125822/dist-before-$(date +%Y%m%d-%H%M%S)/
+fallocate -l 3G /swap2 && chmod 600 /swap2 && mkswap /swap2 >/dev/null && swapon /swap2
+cd /opt/ruoyi-ui && NODE_OPTIONS=--max-old-space-size=1600 npm run build:prod
+swapoff /swap2 && rm -f /swap2
+```
+> vite 构建**会先清空 dist**，构建失败就白屏 —— 所以先备份 dist。实测 45–51 秒。
+
+**数据库备份 / 恢复**
+```bash
+/root/bin/db-backup.sh                     # 手动跑一次（cron 每天 04:17 自动跑）
+ls -lh /root/db-backup/                    # 7 天日备 + 月备，日志在 backup.log
+# 恢复（先停写）：
+zcat /root/db-backup/ry-2ke-<ts>.sql.gz | /www/server/mysql/bin/mysql -uroot -p'<DB_PASSWORD>' -h127.0.0.1 -P3307 ry-2ke
+```
+> 本地异地副本：`第二课堂通知脚本/backups/`。每周手动拉一次最新的比较稳妥。
+
+**换微信插件二维码（后台自助，30 秒）**
+
+企业微信的「微信插件」码 **7 天过期，且没有接口能生成**（实测 `corp/get_join_qrcode` → 48002；插件相关接口全部 404；无头浏览器自动登录被企业微信风控拦截，报「已停止本次访问」）。二维码内容是 `http://weixin.qq.com/q/02...J9Fd1<token>`，每次「重新获取」token 都变，无法做成永久码。
+
+**入口：后台 → 第二课堂 → 二维码管理**（`/2ke/qrcode`，菜单 2022，权限 `system:qrcode:list` / `system:qrcode:upload`）
+
+页面上：
+- 左码「加入企业」标注「永久」，不用管
+- 右码「关注微信插件」显示当前图、更新于、剩余天数（≤2 天徽章变黄，过期变红）
+- 「上传新码」：选截图 → 自动解码校验（不是企业微信的码会提示「截图里没识别到二维码」）→ 裁成 600×600 → 覆盖 `plugin.png` → 更新到期日
+
+取码步骤：企业微信 → 我 → 设置 → 微信插件 → 点「重新获取」→ 截图 → 回后台上传。
+
+实现链路：`QRCodeController`（鉴权 + 状态 + 转发）→ 本机 `127.0.0.1:18091`（`qr-upload.service`，做解码与裁剪）→ 写 `/var/www/2ke-subscribe/`。
+
+**临期提醒**：`23 9 * * * /root/bin/qr-expiry-check.sh` —— 剩 ≤2 天给 `admin_userid = LvZhiYi` 发一条企业微信（含后台地址与取码步骤），每天最多一条。已订阅同学不受码过期影响，只有新同学需要有效码。
+
+配套：
+- 到期日显示在订阅页 ② 号卡下方（`GET /qr-expiry` 读 `/var/www/2ke-subscribe/.plugin-expiry`）
+- `23 9 * * * /root/bin/qr-expiry-check.sh`：剩 ≤2 天时给管理员发一条企业微信（附上传页链接），每天最多一条
+- 备用脚本 `/root/bin/refresh-qr.js`（无头浏览器自动登录后台抓图）**暂不用**——企业微信后台登录码 60 秒一刷，「服务器截图 → 手机扫」这条链路必然超时，实测报「已停止本次访问」
+
+**「加入企业」码（join.png）不用管**：内容是 `https://work.weixin.qq.com/join/ptAPsh7E...`，实测长期有效，用 `qrencode -o join.png -s 12 -m 3 -l M "<URL>"` 可随时重新生成高清版。
+
+**换 2ke cookie**（⚠️ 只走这一个入口）
+后台 → 运维 → 「2ke 登录凭据」行（默认折叠）→ 更新 → 粘贴**完整 Cookie 行**（必须含 `__access_token`）。
+
+> ✅ 采集器现在每轮成功后**自己原子回写** cookie（`.tmp`+fsync+`os.replace`+600），正常情况下不需要人工续。
+> `set-cookie.sh` 已于 10-23 重写为"合并 + 双 key 断言 + 拒绝坏输入"，但仍**优先走后台入口**。
+> ⚠️ 直接 `vim`/`scp` 改 `/opt/jmu-2ke/2ke_cookie.json` 后需要 `systemctl restart 2ke-hub-mysql`（进程只在启动时读文件）。
+
+### 9.4 讲座采集（jwxt / 集大教务，2026-10-28 新增）
+
+**链路**：`cron */30` → `/opt/jwxt/collector_jwxt.py` → 带 cookie 请求 EAMS 两个 JSON 接口 → `ry-2ke.t_lecture` → 后台「第二课堂 → 讲座管理」。
+
+```
+GET https://jwxt.jmu.edu.cn/student/for-std/lecture-enroll/un-enroll-search   讲座列表（主）
+GET https://jwxt.jmu.edu.cn/student/for-std/lecture-enroll/search             我的报名（补 act_state）
+```
+两个都是 EAMS 的 datatable 数据源，**要登录 cookie**：
+`/opt/jwxt/cookie.txt`（600），格式 `__pstsid__=…; SESSION=…`。
+
+**登录态怎么来**：jwxt 走 `i.jmu.edu.cn` → CAS（`cas.paas.jmu.edu.cn`），`__pstsid__` 约 **2 天**过期、`SESSION` 是**会话级**。
+- ⚠️ 门户的 `__access_token`（.jmu.edu.cn，363 天）**jwxt 不认**，实测 302 回登录页
+- ⚠️ CAS 的 `SESSION` 也换不出 jwxt 会话（302 → login → 403）
+- ⚠️ `/student/login` 对非浏览器一律 **403（nginx WAF）**，所以"自动登录"这条路没走通，只能人工取 cookie
+
+**换登录态**（唯二入口）：
+1. 后台 → 第二课堂 → 讲座管理 → 「更新登录态」→ 粘 Cookie 整行（推荐）
+2. 直接改 `/opt/jwxt/cookie.txt`（改完不用重启，下次 cron 就读）
+
+**取 Cookie 的步骤**：浏览器打开
+`https://jwxt.jmu.edu.cn/student/for-std/lecture-enroll/index/unEnroll/97314`
+→ F12 → Network → Ctrl+R → 点任一请求 → Request Headers → 复制 `Cookie:` 整行。
+
+**失效告警**：采集器检测到非 JSON（302/403/HTML）时，给管理员发企业微信（1 小时冷却），告警正文里带换 cookie 的步骤。
+
+### TGC 自动续期（2026-10-28 晚间打通，推荐方式）
+
+**为什么不再需要 2 天换一次 cookie**：CAS 有票据续期机制，实测链路完整可行：
+
+```
+带 Cookie: TGC=<值>  →  GET cas.paas.jmu.edu.cn/cas/login?service=https://jwxt.jmu.edu.cn/student/sso/login
+                      ←  302 Location: https://jwxt.jmu.edu.cn/student/sso/login?ticket=ST-xxx
+带 ticket 跟随 302      → 302 设 __pstsid__ + SESSION  →  再 302 到 /student/home（认证完成）
+                      → 之后正常抓 un-enroll-search（200）
+```
+
+- TGC 存 `/opt/jwxt/tgc.txt`（600），采集器每轮**先用 TGC 换新会话**，成功就把新 `__pstsid__; SESSION` 原子回写 `cookie.txt`
+- TGC 有效期内 → **完全免人工**；TGC 失效 → 日志 `TGC 已失效` + state.json 的 `tgc_ok=false` + 企业微信告警
+- **怎么拿 TGC**：浏览器登 `https://i.jmu.edu.cn` → F12 → Application → Cookies → `https://cas.paas.jmu.edu.cn` → 复制 `TGC` 的值 → 后台「讲座管理 → 更新登录态」粘贴
+- 后台该接口**两种输入都认**：纯 TGC 值（推荐）/ 含 `__pstsid__`+`SESSION` 的整行 Cookie（临时方案）
+
+**⚠️ 走不通的路（省得下次再试）**：
+- 门户 `__access_token`（.jmu.edu.cn，363 天）→ jwxt **不认**
+- CAS 的 `SESSION` 直连 `cas/login` → 换不出 ticket（必须 TGC）
+- 服务端模拟 CAS 登录 → **卡在双因子**：登录页内联 JS 有 `mfaEnabled="true"`、`mfaTypeSecurePhone="true"`，登录后要手机短信
+- `/student/login` 对非浏览器一律 **403（nginx WAF）**；只有 `/student/sso/login` 和 `/student/j_spring_cas_security_check` 不被拦
+- 「信任此设备」勾选**不会**落长期 cookie（实测：`TGC`、`SESSION`、`isLogin` 全是 session 级）
+
+**手动跑一次**：`cd /opt/jwxt && python3 collector_jwxt.py --verbose`
+**看状态**：`cat /opt/jwxt/state.json` / `tail /opt/jwxt/collector.log`
+**回滚**：`/root/pre-fix-backup-20261023-125822/collector_jwxt.py.bak-*`、`jwxt-feature-*/`（后端三个文件）、删 `sys_menu` 2024/2025/2026。
+
+> 注意：`t_lecture` 是**只读镜像**，后台不提供增删改；「立即采集」执行的是**固定脚本，不接受任何参数**（避免命令注入）。
+
+### 讲座推送（2026-10-28 接入，默认关闭）
+
+**为什么不复用 dispatcher**：dispatcher 是 2ke 活动的水位游标逻辑，掺进讲座会互相干扰。讲座推送放在**采集器内部**，链路自包含：
+
+```
+采集 → upsert t_lecture（rowcount=1 即新讲座）
+     → push_new_lectures()
+        ├ 读 /opt/jwxt/push.json：enabled=false 就只采集不推
+        ├ 首次建库 baseline：登记 t_lecture_delivery(status=skipped)，不推送
+        └ 之后：对 t_subscriber 里 status='0' 的人逐个发 text，幂等写 delivery
+```
+
+**开关**：后台「讲座管理」页顶部 `讲座推送` 开关 → 读写 `/opt/jwxt/push.json`。
+- 默认 **false**（只采集不打扰学生）
+- 打开后：**新发现的讲座**才推，存量不补推
+
+**文案**（`render_lecture_rich()`）：
+```
+讲座：有新讲座
+
+【从地震到海啸】
+主讲：刘嘉琦
+主办：港口与海岸工程学院
+时间：2026-10-28 19:00 ~ 20:30
+地点：建发0220
+名额：174 人（已报 173，剩 1）
+报名：2026-10-26 08:00 ~ 2026-10-28 19:00
+类型：自然科学类
+讲座ID：8546
+
+👉 打开：https://i.jmu.edu.cn
+```
+（链接用门户而不是报名深链——`unEnroll/97314` 里 97314 是**学生ID**，对别人无效）
+
+**调度**：`jwxt-collector.timer`（每 30 分钟，`OnCalendar=*:0/30`，`Persistent=true`），对应 oneshot 服务 `jwxt-collector.service`。已取代原 cron 条目。
+
+**已融入系统的位置**：
+| 位置 | 内容 |
+|---|---|
+| 后台菜单 | 第二课堂 → **讲座管理**（2024，目录）→ **讲座列表**（2027，`system:lecture:list`，按钮 2025 立即采集 / 2026 更新登录态）+ **推送记录**（2028，`system:lecture:delivery`） |
+| 首页 | 统计卡片加「讲座」「讲座可报」两项（共 6 卡） |
+| 运维面板 | 服务列表加 `lecture / jwxt-collector.timer / 讲座采集` |
+| 讲座管理页 | 推送开关 + 「推送记录」弹窗（含 sent/failed/skipped 统计）+ 每条「详情」（介绍纯文本） |
+
+> ⚠️ **学生端不展示讲座**（2026-10-28 用户明确要求）。曾做过订阅页「近期讲座」板块 + `TLecturePublicController`（@Anonymous），已全部撤销：订阅页从备份恢复（无该板块），公开接口源码删除、重新编译后 jar 内无 `TLecturePublic`。讲座只在**后台**可见，学生侧只有企业微信推送（且开关默认关）。
+
+### 后台菜单最终结构（2026-10-28 定型，含三个坑）
+
+```
+首页
+第二课堂 ⌄        2018  path=2ke      目录
+   第二课堂活动     2000  activity     system/activity/index
+   通知投递记录     2006  delivery     system/delivery/index     ← name=Delivery
+   通知订阅者       2012  subscriber   system/subscriber/index
+讲座管理 ⌄        2024  path=lecture  目录（**顶级**）
+   讲座列表        2027  list         system/lecture/index      + 按钮 2025 立即采集 / 2026 更新登录态
+   推送记录        2028  delivery     system/lecture/delivery   ← **route_name=LectureDelivery**
+手动推送          2019  path=push     C 类型顶级菜单项 → system/push/index
+系统运维          2020  path=ops      C 类型顶级菜单项 → system/ops/index
+公告管理          2021  path=tnotice  C 类型顶级菜单项 → system/tnotice/index
+二维码管理        2022  path=qrcode   C 类型顶级菜单项 → system/qrcode/index
+（系统管理 1 / 系统监控 2 / 系统工具 3 均 visible='1' 隐藏，URL 仍可直连）
+```
+
+**三个必须知道的坑**（都踩过，别再犯）：
+
+1. **顶级菜单项（parent=0 + C 类型）若依会包装成 `path='/'`** → 多个顶级菜单项全部变成 `/` 互相覆盖。
+   已改 `SysMenuServiceImpl` 两处：`getRouterPath()` 对 `isMenuFrame` 返回 `"/" + path`；`buildMenus()` 里该分支设 `component=Layout` + `redirect="/{path}/index"` + 单个 `children[path="index"]`。
+   **缺 Layout → 页面没侧边栏；缺 redirect → 白屏**（这两个都试过）。
+2. **`path` 重复会导致路由 `name` 冲突**（若依用 capitalize(path) 做 name）。`2006` 和 `2028` 都叫 `delivery` → 后者把前者顶掉，`/2ke/delivery` 404。
+   解法：给 `2028` 设 `route_name='LectureDelivery'`。查全库冲突：`SELECT path,COUNT(*) FROM sys_menu WHERE menu_type='C' AND status='0' GROUP BY path HAVING COUNT(*)>1;`
+3. **`/2ke/lecture` 是目录节点不给渲染**。已在 `src/router/index.js` 的 constantRoutes 加 `{ path:'/2ke/lecture', hidden:true, redirect:'/lecture/list' }`（讲座已提升为顶级，这里保留是为了旧书签）。
+> ⚠️ 若依对不存在/未授权的接口返回 **HTTP 200 + body `{"code":401}`**，验证下线要看 body 而不是状态码。
+
+**失败重试**：`retry_failed_lectures()` 每次采集后跑，口径同二课——只捞 `send_status='failed'`、`attempt<3`、6 小时内的，重发并累加 attempt。`unknown` 类不重发（可能已送达）。
+
+**隐私红线**（硬约束 §7-10）：只调 `/un-enroll-search`（纯讲座列表）；**禁止**调 `/search`（「我的报名」含 student.id / 姓名 / 学号 / 签到时间）；不统计"我报名了几个"；日志不出现此类数字。2026-10-28 已按此整改：删代码、清 `state.json` 的 `my_enroll`、清日志 10 行、删服务器与本地全部临时凭证文件。
+
+**一键回滚（2026-10-23 全套修复的回滚点）**
+- 前端：`rm -rf /opt/ruoyi-ui/dist && cp -a /root/pre-fix-backup-20261023-125822/dist-before-<ts>/dist /opt/ruoyi-ui/dist`
+- 后端 jar：`cp -a /root/pre-fix-backup-20261023-125822/ruoyi-admin.jar.bak-<ts> /opt/ruoyi/ruoyi-admin/target/ruoyi-admin.jar && systemctl restart ruoyi-app`
+- 后端源码：`/root/pre-fix-backup-20261023-125822/ruoyi-src-20261023-130145/`（13 文件）+ `fix-C-20261023.diff`
+- python：`/root/pre-fix-backup-20261023-125822/*.bak-fix-20261023-130217` → 重启对应服务
+- systemd：`/root/pre-fix-backup-20261023-125822/etc-systemd.tar.gz`
+- nginx：`/root/pre-fix-backup-20261023-125822/etc-nginx.tar.gz`
+- 公钥：`cp -a /root/pre-fix-backup-20261023-125822/A-ops/authorized_keys.orig /root/.ssh/authorized_keys`
+- 数据库：`/root/db-backup/ry-2ke-20261023-125822.sql.gz`
+- 学分回填：`t_activity_bak_creditfix_20261023`
+
+### 9.5 全量备份（代码 + 数据 + 配置 + 凭据，2026-10-28 建立）
+
+**两段式：服务器打包 → 本机拉取**（服务器只留 7 天，本机也留 7 份，互不依赖）
+
+```
+服务器  04:50  /root/bin/full-backup.sh  →  /root/full-backup/full-YYYYmmdd-HHMM.tar.gz (7.7M)
+本机    05:10  第二课堂通知脚本\sync-full-backup.js  →  第二课堂通知脚本\backup-full\
+```
+
+**server 端脚本产出**（一个 tar.gz 内含 5 件）：
+| 文件 | 内容 |
+|---|---|
+| `db-ry-2ke.sql.gz` | 全库 dump（174K → 1.3M 明文，`--single-transaction --routines --triggers`） |
+| `code.tar.gz` | `opt/ruoyi` `opt/ruoyi-ui` `opt/2ke-hub` `opt/jwxt` `opt/jmu-2ke` `var/www/2ke-subscribe`（排除 node_modules/target/.git/venv/日志） |
+| `config.tar.gz` | `etc/nginx` `etc/systemd/system` `etc/logrotate.d` |
+| `secrets.tar.gz` | `wecom.json` `cookie.txt` `tgc.txt` `push.json` `state.json` `2ke_cookie.json`（600） |
+| `MANIFEST.txt` | 表清单、行数、恢复步骤 |
+
+**本机**：`sync-full-backup.js`（Node + ssh2，用 `tmp/ssh/node_modules`）按文件名+大小比对增量下载，`.part` 临时文件 + 大小校验后才 rename，日志写 `backup-full\sync.log`；保留最近 7 份。
+Windows 计划任务 `2ke-full-backup`，每天 05:10，当前用户身份（不是 SYSTEM——`schtasks /ru SYSTEM` 需要管理员，用 `Register-ScheduledTask` 免提权）。
+
+**踩过的坑**：
+- 数据库密码含 `#`，写进 `my.cnf` 会被当注释 → 必须用 `MYSQL_PWD` 环境变量传
+- `ssh2` 只装在 `tmp/ssh/node_modules`，备份脚本在别处 → require 里做双路径兜底
+
+**验证过的**：包 7.69MB / 9 条目，5 个组件齐；dump 解压 1348KB 明文，7 张关键表全在；端到端「服务器生成 → 本机拉取」跑通；计划任务手动触发返回 0。
+
+---
+
+## 10. 演进时间线（浓缩）
+
+| 时间 | 事件 |
+|---|---|
+| 10-21 上午 | 登录集美「每日交作业」教师端，导出 Day1–18 作业附件/截图打包 |
+| 10-21 14:xx | 排查阿里云「蠕虫病毒命令」告警 → 确认为真实入侵（`lzy` 账号被利用 `curl .../ezo \| perl`），已隔离 |
+| 10-21 15:xx | 找到 2ke 通知脚本 → 用户要求做成公用通知平台 |
+| 10-21 16:xx | 放弃 Streamlit，强上若依；建独立 MySQL 3307 / Redis 6379；导入代码生成器 CRUD |
+| 10-21 17:xx | 选推送渠道：WxPusher 不行（要 App）→ **企业微信自建应用 + 微信插件** 定案，端到端打通 |
+| 10-21 18:xx | 写 dispatcher，企业微信后台配置（加人需审核、禁群聊、1v1 通知） |
+| 10-21 19–22 | 后台美化（广告/菜单折叠/首页图表/手动推送/运维面板+服务日志/Cookie 管理）、通知公告表、域名接入 |
+| 10-22 上午 | 安全审计（真实入侵取证、php2shell 排查）、漏洞 1/2 修复（Druid 后台、Swagger 全关） |
+| 10-22 下午 | 桌面版 exe（.NET + WebView2）、nginx 域名劫持修复、Cookie 更新接口 |
+| 10-22 晚 | 海报反复迭代 → `第二课堂海报-成稿.png`（米白 Claude 风、双码、集大元素淡入） |
+| 10-23 11:5x | 复盘学分采集 → 发现 total 是各档求和 → 改 max + 加区间，回填 187 条 |
+| 10-23 12:2x | 投递记录改「一行一个活动」聚合视图 + 只看失败（219 明细 → 17 行） |
+| 10-23 12:33 | 新会话接手：建本档案、拉取服务器源码快照、归档 246 条历史指令 |
+| 10-23 12:38 | 学分口径**确定保持现状**；清理 openclaw 残留（18089 双 listen 修复、nip 配置删除、订阅站配置改名） |
+| 10-23 12:40–13:05 | **全面审计**：5 人编队分域只读审计 + Lead 自审对外层 → P0 10 / P1 35 / P2 79（`audit-20261023/00-汇总.md`） |
+| 10-23 12:58 | 首份 `mysqldump` + 每日备份 cron + 全套配置/源码备份包（本地也存一份） |
+| 10-23 13:00 | 恢复登录防护（验证码 + 5 次锁定 + 登录限速 429 实测）+ `ruoyi-app` 加 `MemoryMax=700M` 与 MySQL 就绪门禁 |
+| 10-23 13:04 | 前端 34 处修复 + 构建上线（手机端运维页/弹窗宽度/公告导出/删死按钮/登录路由…） |
+| 10-23 13:08 | 后端 13 文件编译上线（投递账本四层封堵、`ry` 停用、secret 轮换、公告模糊搜索、去 raw_json、deptOptions） |
+| 10-23 13:14 | 采集/分发 11 项修复上线（元组水位、空转不推水位、停用复活、unknown 三态、cookie 原子回写、解析断言、set-cookie 重写） |
+| 10-23 13:19 | **自愈链实测通过**：重启 MySQL 5 秒返回、socket 1 秒就绪、`NRestarts` 110→0、零 `socket lock file` 报错 |
+| 10-23 13:20 | 新增 HTTPS 后台入口 `example.com:18443`；fail2ban / 公钥清理 / ufw 收面 / Docker 端口封堵 / 磁盘 74%→67% / 单 certbot |
+| 10-23 13:21 | 总验收全绿，见 `audit-20261023/fix-总报告.md` |
+| 10-23 13:26 | 订阅页改版：换成海报同款米白 + 衬线风格；`join.png` 用 qrencode 重生成高清版（内容为长期邀请链接） |
+| 10-23 13:36 | 微信插件码自助更新上线：`/qr-upload/<token>` 上传页 + `qr-upload.service` + `/qr-expiry` 到期日接口 + 到期前 2 天提醒 cron。新码内容 `02_wJ0sIoJ9Fd1U1_AxGcF`，到期 10-30 |
+| 10-23 13:58 | 爬虫方案验证失败：企业微信服务端风控拦截机房 IP 登录后台（扫码两次均报「已停止本次访问」），`qr-bot` 已停用 |
+| 10-23 14:00 | **后台集成「二维码管理」**（菜单 2022/2023 + `QRCodeController` + `views/system/qrcode`）：状态、剩余天数、上传换码；临期提醒改指向后台页，收件人<STUDENT_NAME> |
+| 10-23 14:11 | 同步节奏加快：通讯录 **60s**（独立）、分发 **120s**；实测 `14:11:16→14:12:17→14:13:17` 每分钟一次 |
+| 10-23 14:17 | 巡检加 pending 死行告警（>30 分钟未结束通知管理员）；采集异常告警的续期入口改指后台 |
+| 10-23 14:18 | 补 80 端口 `/2ke-api/` 反代（IP 入口公告页恢复）；海报改为单码版（指向订阅页，永不过期） |
+| 10-23 14:24 | 清理：删 playwright/chromium（681MB）+ `/root/archive/www-20260814.tar`（2.8G）→ 磁盘 70%→**61%**；重启 docker 使日志上限（50m×3）生效；公告正文重写（字段列表与推送一致、编号逻辑修正、去「2ke 公开页面」措辞） |
+| 10-24/25 | 关验证码 + 登录有效期 12h→**48h**（`token.expireTime: 2880`，redis TTL 实测 172800 秒）；手动推送加**图片上传**（`POST /system/push/uploadImage` → 存 `/var/www/2ke-subscribe/push/`，正文以链接引用；`push-img-clean.sh` 每周日清 30 天前文件） |
+| 10-25 | 手动推送改为**文图分开发**：勾选图片后先发 `text` 再发 `image`（两条）。`WeComService` 新增 `uploadImage()`（`media/upload` multipart，media_id 有效期 3 天）与 `sendImage()`；`TPushController.send` 接受 `imageBase64`，返回 `{text, image}` 两段结果。实测 `media/upload` → `errcode:0` 拿到 media_id。图片上限 5MB（企业微信侧） |
+| 10-28 | **接入集大教务讲座**：摸清 jwxt=EAMS，登录走 CAS（`cas.paas.jmu.edu.cn`），登录页对自动化一律 403 → 放弃模拟登录，改人工 cookie。定位到真正的数据接口 `un-enroll-search`（讲座列表）+ `search`（我的报名）。新建 `t_lecture`、`/opt/jwxt/collector_jwxt.py`（cron 30 分钟）、失效企业微信告警、后台「讲座管理」页（列表/筛选/立即采集/更新登录态）。实测入库 3 场讲座 |
+| 10-28 20:xx | **三路只读审计 + 两条 P0 修复**：审计发现「t_activity 无陈旧回收（3 条活动卡 open）」与「jwxt 拿不全就标 gone（>20 条必批量误标）」，均已修（陈旧回收按 `last_seen` 12h 兜底；jwxt 校验 `totalRows` vs 实收，拿不全跳过并告警）。报告在 `audit-20261028*.md`。同时清掉隐私残留（cron.log 的「我的报名」、patch 脚本里的 97314、`sys_oper_log` 里明文 JWT/TGC 8 行）、备份权限 0644→600、补跑备份让 `t_lecture` 入库 |
+| 10-28 20:2x | **删除摄像头项目**（用户要求）：`detect-api.service`、`mediamtx.service` 停用+disable，`/etc/nginx/conf.d/dsh-tunnel.conf` 移出，`/var/www/cam` 删除，给 `example.com` 的 443 加 `default_server`（IP 直访回到订阅页）。备份在 `/root/pre-fix-backup-20261023-125822/cam-removal-20261028-202010/`。⚠️ `sites-enabled/beef-wss`（61986）仍在，未动 |
+
+---
+
+## 11. 本地产物地图
+
+```
+C:\Users\myr\Documents\AI workspace\
+├─ 第二课堂通知脚本\
+│   ├─ SYSTEM-档案.md              ← 本文件（唯一权威交接文档）
+│   ├─ server-snapshot-20261023\   ← 12:38 的服务器源码快照（deploy / ruoyi-ui / ruoyi）
+│   ├─ audit-20261023\             ← 审计 6 份 + 修复 4 份 + 00-汇总 + fix-总报告
+│   ├─ backups\                    ← 异地备份（db dump + 修复前全量包）
+│   ├─ history\                    ← 246 条历史指令 + 4 份压缩摘要 + 末段交接
+│   ├─ 2ke-hub\                    ← 早期本地工作副本（已落后，以服务器为准）
+│   └─ jmu_2ke_api.py / set-cookie.sh / 2ke_state.json
+├─ 第二课堂海报-成稿.png            ← 当前海报
+├─ 第二课堂订阅二维码.png            ← 单码卡片
+├─ 订阅页.png / 主页-订阅页.png / 公告页-已更新.png
+├─ 后台-*.png（约 20 张，历次验收截图）
+└─ tmp\ssh\run.js                  ← SSH 助手（默认 host/user/pass 写在文件里）
+```
+
+服务器侧关键路径：`/opt/2ke-hub/`、`/opt/jmu-2ke/`、`/opt/ruoyi/`、`/opt/ruoyi-ui/`、`/var/www/2ke-subscribe/`、`/root/bin/`（备份与部署脚本）、`/root/db-backup/`、`/root/pre-fix-backup-20261023-125822/`（全套回滚点）。
+
+---
+
+## 12. 接手 checklist（新会话第 1 步跑这个）
+
+```powershell
+cd 'C:\Users\myr\Documents\AI workspace\tmp\ssh'
+node run.js "systemctl is-active 2ke-hub-mysql 2ke-dispatcher 2ke-wecom ruoyi-app nginx ruoyi-mysql ruoyi-redis; curl -s -o /dev/null -w 'api:%{http_code} ' http://127.0.0.1:18081/system/tnotice/public/list; curl -s -o /dev/null -w 'root:%{http_code}\n' http://127.0.0.1/"
+```
+
+要数据就查：活动/订阅/投递计数、`last_dispatch` 水位、`__access_token` 剩余天数。
+要动手前先读 §7 硬约束，再读 §8 待决策。

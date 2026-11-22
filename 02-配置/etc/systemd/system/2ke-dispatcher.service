@@ -1,0 +1,20 @@
+[Unit]
+Description=2ke-hub dispatcher (activity -> WeCom push)
+After=network.target ruoyi-mysql.service 2ke-wecom.service
+Wants=ruoyi-mysql.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/2ke-hub
+ExecStart=/usr/bin/python3 -u /opt/2ke-hub/dispatcher.py
+Restart=always
+RestartSec=30
+MemoryMax=128M
+CPUQuota=10%
+SyslogIdentifier=2ke-dispatcher
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

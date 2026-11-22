@@ -1,0 +1,62 @@
+# 数据源配置
+spring:
+    datasource:
+        type: com.alibaba.druid.pool.DruidDataSource
+        driverClassName: com.mysql.cj.jdbc.Driver
+        druid:
+            # 主库数据源
+            master:
+                url: jdbc:mysql://127.0.0.1:3307/ry-2ke?useUnicode=true&characterEncoding=utf8&zeroDateTimeBehavior=convertToNull&useSSL=false&serverTimezone=GMT%2B8&allowPublicKeyRetrieval=true
+                username: root
+                password: "<DB_PASSWORD>"
+            # 从库数据源
+            slave:
+                # 从数据源开关/默认关闭
+                enabled: false
+                url: 
+                username: 
+                password: 
+            # 初始连接数
+            initialSize: 5
+            # 最小连接池数量
+            minIdle: 10
+            # 最大连接池数量
+            maxActive: 20
+            # 配置获取连接等待超时的时间
+            maxWait: 60000
+            # 配置连接超时时间
+            connectTimeout: 30000
+            # 配置网络超时时间
+            socketTimeout: 60000
+            # 配置间隔多久才进行一次检测，检测需要关闭的空闲连接，单位是毫秒
+            timeBetweenEvictionRunsMillis: 60000
+            # 配置一个连接在池中最小生存的时间，单位是毫秒
+            minEvictableIdleTimeMillis: 300000
+            # 配置一个连接在池中最大生存的时间，单位是毫秒
+            maxEvictableIdleTimeMillis: 900000
+            # 配置检测连接是否有效
+            validationQuery: SELECT 1 FROM DUAL
+            testWhileIdle: true
+            testOnBorrow: false
+            testOnReturn: false
+            # 安全：Druid 监控台与大屏一律关闭。
+            # 原配置是 ruoyi/123456 默认口令，任何人登录后能看到全部 SQL
+            # （含学生姓名学号）、Session、连接池。生产环境没有任何用途。
+            webStatFilter: 
+                enabled: false
+            statViewServlet:
+                enabled: false
+            filter:
+                stat:
+                    enabled: true
+                    # 慢SQL记录
+                    log-slow-sql: true
+                    slow-sql-millis: 1000
+                    merge-sql: true
+                wall:
+                    config:
+                        # 2026-10-23 审计 C 修正（P2）：原来是 true。
+                        # 全仓 SQL 都走 #{} 预编译（grep '\$\{' 命中 0），当前无注入点，
+                        # 但 true 等于主动关掉「一条语句里塞 ; drop table」的兜底。
+                        # 若依业务没有任何多语句需求，一律 false。
+                        multi-statement-allow: false

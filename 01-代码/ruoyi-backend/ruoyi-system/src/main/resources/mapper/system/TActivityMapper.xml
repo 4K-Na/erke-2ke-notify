@@ -1,0 +1,191 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.system.mapper.TActivityMapper">
+    
+    <resultMap type="TActivity" id="TActivityResult">
+        <result property="activityId"    column="activity_id"    />
+        <result property="title"    column="title"    />
+        <result property="activityType"    column="activity_type"    />
+        <result property="activityTypeLabel"    column="activity_type_label"    />
+        <result property="deptLabel"    column="dept_label"    />
+        <result property="creatorCollege"    column="creator_college"    />
+        <result property="creditTotal"    column="credit_total"    />
+        <result property="creditDetail"    column="credit_detail"    />
+        <result property="creditTypeName"    column="credit_type_name"    />
+        <result property="startAt"    column="start_at"    />
+        <result property="endAt"    column="end_at"    />
+        <result property="signinStart"    column="signin_start"    />
+        <result property="signinEnd"    column="signin_end"    />
+        <result property="signupWay"    column="signup_way"    />
+        <result property="address"    column="address"    />
+        <result property="quota"    column="quota"    />
+        <result property="actState"    column="act_state"    />
+        <result property="firstSeen"    column="first_seen"    />
+        <result property="lastSeen"    column="last_seen"    />
+        <result property="rawJson"    column="raw_json"    />
+        <result property="createBy"    column="create_by"    />
+        <result property="createTime"    column="create_time"    />
+        <result property="updateBy"    column="update_by"    />
+        <result property="updateTime"    column="update_time"    />
+        <result property="remark"    column="remark"    />
+    </resultMap>
+
+    <!-- 2026-10-23 审计 C 修正（列表去 raw_json）：
+         列表 / 导出走这套**窄列**清单，不再带 raw_json。
+         实测 raw_json 平均 1694B、最大 2612B、全表 316KB（187 行），
+         列表每页 10 行白传 ~17KB，导出一次 316KB 全塞进 Excel 一个单元格列；
+         更要紧的是它是 2ke 原始报文，字段随对方改版漂移，不该给前端看。
+         需要 raw_json 的只有 selectTActivityByActivityId（详情），那里已单独写全列。 -->
+    <sql id="selectTActivityVo">
+        select activity_id, title, activity_type, activity_type_label, dept_label, creator_college, credit_total, credit_detail, credit_type_name, start_at, end_at, signin_start, signin_end, signup_way, address, quota, act_state, first_seen, last_seen, create_by, create_time, update_by, update_time, remark from t_activity
+    </sql>
+
+    <select id="selectTActivityList" parameterType="TActivity" resultMap="TActivityResult">
+        <include refid="selectTActivityVo"/>
+        <where>  
+            <if test="title != null  and title != ''"> and title like concat('%', #{title}, '%')</if>
+            <if test="activityType != null  and activityType != ''"> and activity_type = #{activityType}</if>
+            <if test="activityTypeLabel != null  and activityTypeLabel != ''"> and activity_type_label = #{activityTypeLabel}</if>
+            <if test="deptLabel != null  and deptLabel != ''"> and dept_label like concat('%', #{deptLabel}, '%')</if>
+            <if test="creatorCollege != null  and creatorCollege != ''"> and creator_college = #{creatorCollege}</if>
+            <if test="creditTotal != null "> and credit_total &gt;= #{creditTotal}</if>
+            <if test="creditDetail != null  and creditDetail != ''"> and credit_detail = #{creditDetail}</if>
+            <if test="creditTypeName != null  and creditTypeName != ''"> and credit_type_name like concat('%', #{creditTypeName}, '%')</if>
+            <if test="startAt != null "> and start_at = #{startAt}</if>
+            <if test="endAt != null "> and end_at = #{endAt}</if>
+            <if test="signinStart != null "> and signin_start = #{signinStart}</if>
+            <if test="signinEnd != null "> and signin_end = #{signinEnd}</if>
+            <if test="signupWay != null  and signupWay != ''"> and signup_way = #{signupWay}</if>
+            <if test="address != null  and address != ''"> and address like concat('%', #{address}, '%')</if>
+            <if test="quota != null "> and quota = #{quota}</if>
+            <if test="actState != null  and actState != ''"> and act_state = #{actState}</if>
+            <if test="params.beginStartAt != null and params.beginStartAt != ''"> and start_at &gt;= #{params.beginStartAt}</if>
+            <if test="params.endStartAt != null and params.endStartAt != ''"> and start_at &lt;= concat(#{params.endStartAt}, ' 23:59:59')</if>
+            <if test="firstSeen != null "> and first_seen = #{firstSeen}</if>
+            <if test="lastSeen != null "> and last_seen = #{lastSeen}</if>
+            <if test="rawJson != null  and rawJson != ''"> and raw_json = #{rawJson}</if>
+        </where>
+        order by start_at desc
+    </select>
+    
+    <!-- 详情接口保留 raw_json（只有单条，几十 KB 级别的白传在这里不存在）。
+         这里显式写全列，不再依赖 selectTActivityVo（那个已经不带 raw_json 了）。 -->
+    <select id="selectTActivityByActivityId" parameterType="String" resultMap="TActivityResult">
+        select activity_id, title, activity_type, activity_type_label, dept_label, creator_college, credit_total, credit_detail, credit_type_name, start_at, end_at, signin_start, signin_end, signup_way, address, quota, act_state, first_seen, last_seen, raw_json, create_by, create_time, update_by, update_time, remark from t_activity
+        where activity_id = #{activityId}
+    </select>
+
+    <insert id="insertTActivity" parameterType="TActivity">
+        insert into t_activity
+        <trim prefix="(" suffix=")" suffixOverrides=",">
+            <if test="activityId != null">activity_id,</if>
+            <if test="title != null">title,</if>
+            <if test="activityType != null">activity_type,</if>
+            <if test="activityTypeLabel != null">activity_type_label,</if>
+            <if test="deptLabel != null">dept_label,</if>
+            <if test="creatorCollege != null">creator_college,</if>
+            <if test="creditTotal != null">credit_total,</if>
+            <if test="creditDetail != null">credit_detail,</if>
+            <if test="creditTypeName != null">credit_type_name,</if>
+            <if test="startAt != null">start_at,</if>
+            <if test="endAt != null">end_at,</if>
+            <if test="signinStart != null">signin_start,</if>
+            <if test="signinEnd != null">signin_end,</if>
+            <if test="signupWay != null">signup_way,</if>
+            <if test="address != null">address,</if>
+            <if test="quota != null">quota,</if>
+            <if test="actState != null">act_state,</if>
+            <if test="firstSeen != null">first_seen,</if>
+            <if test="lastSeen != null">last_seen,</if>
+            <if test="rawJson != null">raw_json,</if>
+            <if test="createBy != null">create_by,</if>
+            <if test="createTime != null">create_time,</if>
+            <if test="updateBy != null">update_by,</if>
+            <if test="updateTime != null">update_time,</if>
+            <if test="remark != null">remark,</if>
+         </trim>
+        <trim prefix="values (" suffix=")" suffixOverrides=",">
+            <if test="activityId != null">#{activityId},</if>
+            <if test="title != null">#{title},</if>
+            <if test="activityType != null">#{activityType},</if>
+            <if test="activityTypeLabel != null">#{activityTypeLabel},</if>
+            <if test="deptLabel != null">#{deptLabel},</if>
+            <if test="creatorCollege != null">#{creatorCollege},</if>
+            <if test="creditTotal != null">#{creditTotal},</if>
+            <if test="creditDetail != null">#{creditDetail},</if>
+            <if test="creditTypeName != null">#{creditTypeName},</if>
+            <if test="startAt != null">#{startAt},</if>
+            <if test="endAt != null">#{endAt},</if>
+            <if test="signinStart != null">#{signinStart},</if>
+            <if test="signinEnd != null">#{signinEnd},</if>
+            <if test="signupWay != null">#{signupWay},</if>
+            <if test="address != null">#{address},</if>
+            <if test="quota != null">#{quota},</if>
+            <if test="actState != null">#{actState},</if>
+            <if test="firstSeen != null">#{firstSeen},</if>
+            <if test="lastSeen != null">#{lastSeen},</if>
+            <if test="rawJson != null">#{rawJson},</if>
+            <if test="createBy != null">#{createBy},</if>
+            <if test="createTime != null">#{createTime},</if>
+            <if test="updateBy != null">#{updateBy},</if>
+            <if test="updateTime != null">#{updateTime},</if>
+            <if test="remark != null">#{remark},</if>
+         </trim>
+    </insert>
+
+    <update id="updateTActivity" parameterType="TActivity">
+        update t_activity
+        <trim prefix="SET" suffixOverrides=",">
+            <if test="title != null">title = #{title},</if>
+            <if test="activityType != null">activity_type = #{activityType},</if>
+            <if test="activityTypeLabel != null">activity_type_label = #{activityTypeLabel},</if>
+            <if test="deptLabel != null">dept_label = #{deptLabel},</if>
+            <if test="creatorCollege != null">creator_college = #{creatorCollege},</if>
+            <if test="creditTotal != null">credit_total = #{creditTotal},</if>
+            <if test="creditDetail != null">credit_detail = #{creditDetail},</if>
+            <if test="creditTypeName != null">credit_type_name = #{creditTypeName},</if>
+            <if test="startAt != null">start_at = #{startAt},</if>
+            <if test="endAt != null">end_at = #{endAt},</if>
+            <if test="signinStart != null">signin_start = #{signinStart},</if>
+            <if test="signinEnd != null">signin_end = #{signinEnd},</if>
+            <if test="signupWay != null">signup_way = #{signupWay},</if>
+            <if test="address != null">address = #{address},</if>
+            <if test="quota != null">quota = #{quota},</if>
+            <if test="actState != null">act_state = #{actState},</if>
+            <if test="firstSeen != null">first_seen = #{firstSeen},</if>
+            <if test="lastSeen != null">last_seen = #{lastSeen},</if>
+            <if test="rawJson != null">raw_json = #{rawJson},</if>
+            <if test="createBy != null">create_by = #{createBy},</if>
+            <if test="createTime != null">create_time = #{createTime},</if>
+            <if test="updateBy != null">update_by = #{updateBy},</if>
+            <if test="updateTime != null">update_time = #{updateTime},</if>
+            <if test="remark != null">remark = #{remark},</if>
+        </trim>
+        where activity_id = #{activityId}
+    </update>
+
+    <delete id="deleteTActivityByActivityId" parameterType="String">
+        delete from t_activity where activity_id = #{activityId}
+    </delete>
+
+    <delete id="deleteTActivityByActivityIds" parameterType="String">
+        delete from t_activity where activity_id in 
+        <foreach item="activityId" collection="array" open="(" separator="," close=")">
+            #{activityId}
+        </foreach>
+    </delete>
+
+    <!-- 2026-10-23 新增（配合前端主办单位下拉）：
+         原来前端部门下拉是前端自己捞一页活动凑 distinct（pageSize:500），
+         活动超 500 条就不全。这里给一个只返回去重 dept_label 的轻量接口。
+         排序用 order by 1（列别名/序号），走的是 dept_label 上的隐式排序，
+         187 行量级无压力；万一以后行数上万再加 (dept_label) 索引。 -->
+    <select id="selectDeptOptions" resultType="java.lang.String">
+        select distinct dept_label
+        from t_activity
+        where dept_label is not null and dept_label != ''
+        order by 1
+    </select>
+</mapper>

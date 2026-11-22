@@ -1,0 +1,12 @@
+# 2026-10-23 fix-A 建立
+# ruoyi-app.service 用 StandardOutput=append:/var/log/ruoyi.log 无限追加，从没轮转过
+/var/log/ruoyi.log {
+    daily
+    rotate 7
+    compress
+    delaycompress
+    missingok
+    notifempty
+    copytruncate
+    su root root
+}

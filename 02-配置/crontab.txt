@@ -1,0 +1,8 @@
+LANG=en_US.UTF-8
+LC_ALL=en_US.UTF-8
+
+17 4 * * * /root/bin/db-backup.sh
+23 9 * * * /root/bin/qr-expiry-check.sh
+30 4 * * 0 /root/bin/push-img-clean.sh
+50 4 * * * /root/bin/full-backup.sh >> /root/full-backup/cron.log 2>&1
+20 4 * * * /root/bin/purge-old.sh >> /root/db-backup/purge.log 2>&1

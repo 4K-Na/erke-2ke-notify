@@ -1,0 +1,153 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.system.mapper.TDeliveryMapper">
+    
+    <resultMap type="TDelivery" id="TDeliveryResult">
+        <result property="deliveryId"    column="delivery_id"    />
+        <result property="activityId"    column="activity_id"    />
+        <result property="activityTitle"    column="activity_title"    />
+        <result property="subscriberName"   column="subscriber_name"   />
+        <result property="subscriberId"    column="subscriber_id"    />
+        <result property="channel"    column="channel"    />
+        <result property="sendStatus"    column="send_status"    />
+        <result property="attempt"    column="attempt"    />
+        <result property="lastError"    column="last_error"    />
+        <result property="sentTime"    column="sent_time"    />
+        <result property="createBy"    column="create_by"    />
+        <result property="createTime"    column="create_time"    />
+        <result property="updateBy"    column="update_by"    />
+        <result property="updateTime"    column="update_time"    />
+        <result property="remark"    column="remark"    />
+    </resultMap>
+
+    <sql id="selectTDeliveryVo">
+        select delivery_id, activity_id, activity_title, subscriber_name, subscriber_id, channel, send_status, attempt, last_error, sent_time, create_by, create_time, update_by, update_time, remark from t_delivery
+    </sql>
+
+    <select id="selectTDeliveryList" parameterType="TDelivery" resultMap="TDeliveryResult">
+        <include refid="selectTDeliveryVo"/>
+        <where>  
+            <if test="activityId != null  and activityId != ''"> and activity_id = #{activityId}</if>
+            <if test="activityTitle != null  and activityTitle != ''"> and activity_title like concat('%', #{activityTitle}, '%')</if>
+            <if test="subscriberId != null "> and subscriber_id = #{subscriberId}</if>
+            <if test="subscriberName != null  and subscriberName != ''"> and subscriber_name like concat('%', #{subscriberName}, '%')</if>
+            <if test="channel != null  and channel != ''"> and channel = #{channel}</if>
+            <if test="sendStatus != null  and sendStatus != ''"> and send_status = #{sendStatus}</if>
+            <if test="attempt != null "> and attempt = #{attempt}</if>
+            <if test="lastError != null  and lastError != ''"> and last_error = #{lastError}</if>
+            <if test="sentTime != null "> and sent_time = #{sentTime}</if>
+        </where>
+        order by create_time desc
+    </select>
+    
+    <select id="selectTDeliveryByDeliveryId" parameterType="Long" resultMap="TDeliveryResult">
+        <include refid="selectTDeliveryVo"/>
+        where delivery_id = #{deliveryId}
+    </select>
+
+    <!-- ========================================================================
+         【2026-10-23 审计 C 2.3（P1）处置：t_delivery 写语句整段停用】
+         t_delivery 是分发器 /opt/2ke-hub/dispatcher.py 的幂等去重账本，
+         靠 UNIQUE(activity_id, subscriber_id) 决定「这一轮发不发」。
+         应用侧任何 INSERT / UPDATE / DELETE 都会直接造成漏推或重推。
+         停用范围：insertTDelivery / updateTDelivery /
+                  deleteTDeliveryByDeliveryId / deleteTDeliveryByDeliveryIds
+         保留语句级兜底：即使有代码路径误调，MyBatis 也只会抛 BindingException，
+         不会有一条 DML 打到 t_delivery。只读语句（list / getInfo / summary）不受影响。
+         ======================================================================== -->
+    <!--
+    <insert id="insertTDelivery" parameterType="TDelivery" useGeneratedKeys="true" keyProperty="deliveryId">
+        insert into t_delivery
+        <trim prefix="(" suffix=")" suffixOverrides=",">
+            <if test="activityId != null and activityId != ''">activity_id,</if>
+            <if test="activityTitle != null">activity_title,</if>
+            <if test="subscriberId != null">subscriber_id,</if>
+            <if test="channel != null">channel,</if>
+            <if test="sendStatus != null">send_status,</if>
+            <if test="attempt != null">attempt,</if>
+            <if test="lastError != null">last_error,</if>
+            <if test="sentTime != null">sent_time,</if>
+            <if test="createBy != null">create_by,</if>
+            <if test="createTime != null">create_time,</if>
+            <if test="updateBy != null">update_by,</if>
+            <if test="updateTime != null">update_time,</if>
+            <if test="remark != null">remark,</if>
+         </trim>
+        <trim prefix="values (" suffix=")" suffixOverrides=",">
+            <if test="activityId != null and activityId != ''">#{activityId},</if>
+            <if test="activityTitle != null">#{activityTitle},</if>
+            <if test="subscriberId != null">#{subscriberId},</if>
+            <if test="channel != null">#{channel},</if>
+            <if test="sendStatus != null">#{sendStatus},</if>
+            <if test="attempt != null">#{attempt},</if>
+            <if test="lastError != null">#{lastError},</if>
+            <if test="sentTime != null">#{sentTime},</if>
+            <if test="createBy != null">#{createBy},</if>
+            <if test="createTime != null">#{createTime},</if>
+            <if test="updateBy != null">#{updateBy},</if>
+            <if test="updateTime != null">#{updateTime},</if>
+            <if test="remark != null">#{remark},</if>
+         </trim>
+    </insert>
+
+    <update id="updateTDelivery" parameterType="TDelivery">
+        update t_delivery
+        <trim prefix="SET" suffixOverrides=",">
+            <if test="activityId != null and activityId != ''">activity_id = #{activityId},</if>
+            <if test="activityTitle != null">activity_title = #{activityTitle},</if>
+            <if test="subscriberId != null">subscriber_id = #{subscriberId},</if>
+            <if test="channel != null">channel = #{channel},</if>
+            <if test="sendStatus != null">send_status = #{sendStatus},</if>
+            <if test="attempt != null">attempt = #{attempt},</if>
+            <if test="lastError != null">last_error = #{lastError},</if>
+            <if test="sentTime != null">sent_time = #{sentTime},</if>
+            <if test="createBy != null">create_by = #{createBy},</if>
+            <if test="createTime != null">create_time = #{createTime},</if>
+            <if test="updateBy != null">update_by = #{updateBy},</if>
+            <if test="updateTime != null">update_time = #{updateTime},</if>
+            <if test="remark != null">remark = #{remark},</if>
+        </trim>
+        where delivery_id = #{deliveryId}
+    </update>
+
+    <delete id="deleteTDeliveryByDeliveryId" parameterType="Long">
+        delete from t_delivery where delivery_id = #{deliveryId}
+    </delete>
+
+    <delete id="deleteTDeliveryByDeliveryIds" parameterType="String">
+        delete from t_delivery where delivery_id in 
+        <foreach item="deliveryId" collection="array" open="(" separator="," close=")">
+            #{deliveryId}
+        </foreach>
+    </delete>
+    END 停用区块
+    ======================================================================== -->
+    <select id="selectDeliverySummary" parameterType="TDelivery" resultType="java.util.LinkedHashMap">
+        select d.activity_id        as activityId,
+               max(d.activity_title) as activityTitle,
+               max(a.activity_type)  as activityType,
+               max(a.dept_label)     as deptLabel,
+               count(*)              as totalCnt,
+               sum(case when d.send_status = 'sent'    then 1 else 0 end) as sentCnt,
+               sum(case when d.send_status = 'failed'  then 1 else 0 end) as failedCnt,
+               sum(case when d.send_status = 'pending' then 1 else 0 end) as pendingCnt,
+               max(d.sent_time)      as lastSentTime,
+               max(d.create_time)    as lastCreateTime
+        from t_delivery d
+        left join t_activity a on a.activity_id = d.activity_id
+        <where>
+            <if test="activityTitle != null and activityTitle != ''"> and d.activity_title like concat('%', #{activityTitle}, '%')</if>
+            <if test="subscriberName != null and subscriberName != ''"> and d.subscriber_name like concat('%', #{subscriberName}, '%')</if>
+            <if test="channel != null and channel != ''"> and d.channel = #{channel}</if>
+            <if test="sendStatus != null and sendStatus != ''"> and d.send_status = #{sendStatus}</if>
+            <if test="params.beginCreateTime != null and params.beginCreateTime != ''"> and d.create_time &gt;= #{params.beginCreateTime}</if>
+            <if test="params.endCreateTime != null and params.endCreateTime != ''"> and d.create_time &lt;= concat(#{params.endCreateTime}, ' 23:59:59')</if>
+        </where>
+        group by d.activity_id
+        <if test="params.onlyFailed != null and params.onlyFailed != ''"> having sum(case when d.send_status = 'failed' then 1 else 0 end) &gt; 0</if>
+        order by failedCnt desc, lastCreateTime desc
+    </select>
+
+</mapper>

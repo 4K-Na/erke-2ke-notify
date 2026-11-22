@@ -1,0 +1,12 @@
+[Unit]
+Description=frp server
+After=network.target
+
+[Service]
+ExecStart=/opt/frp/frps -c /opt/frp/frps.toml
+Restart=always
+RestartSec=3
+MemoryMax=128M
+
+[Install]
+WantedBy=multi-user.target

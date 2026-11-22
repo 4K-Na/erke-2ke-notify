@@ -1,0 +1,8 @@
+{
+  "corp_id": "<WECOM_CORPID>",
+  "agent_id": 1000002,
+  "corp_secret": "<WECOM_SECRET>",
+  "admin_userid": "<ADMIN_USERID>",
+  "aes_key": "<WECOM_AES_KEY>",
+  "token": "<WECOM_TOKEN>"
+}

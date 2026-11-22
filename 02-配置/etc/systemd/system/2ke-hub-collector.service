@@ -1,0 +1,29 @@
+[Unit]
+Description=2ke-hub collector - JMU second-classroom activity collector (store only)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=jmu2ke
+Group=jmu2ke
+WorkingDirectory=/opt/2ke-hub
+ExecStart=/usr/bin/python3 -u /opt/2ke-hub/collector.py
+Restart=always
+RestartSec=30
+SyslogIdentifier=2ke-hub
+StandardOutput=journal
+StandardError=journal
+
+# 资源与隔离：只允许写自己的目录，其它全只读
+Nice=10
+MemoryMax=256M
+CPUQuota=25%
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+NoNewPrivileges=true
+ReadWritePaths=/opt/2ke-hub
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,46 @@
+[Unit]
+Description=RuoYi dedicated MySQL 5.7 (port 3307)
+After=network.target
+
+[Service]
+RuntimeDirectory=ruoyi-mysql
+RuntimeDirectoryMode=0755
+RuntimeDirectoryPreserve=yes
+Type=simple
+User=mysql
+Group=mysql
+# ---- fix-A 自愈链加固 (2026-10-23) ----
+# 根因：RuntimeDirectory 默认 Preserve=no，stop 时 systemd 会把 /run/ruoyi-mysql 整个删掉，
+#       Restart=always 的快速循环里 mysqld 落 mysql.sock.lock 与该删/建存在竞争，
+#       导致 109 次 "Could not create unix socket lock file → Aborting"。
+# 修法：目录保留 + 每次启动前兜底重建/清锁 + 启动后等真正 ready 才算 start 成功。
+ExecStartPre=+/bin/mkdir -p /run/ruoyi-mysql
+ExecStartPre=+/bin/chown mysql:mysql /run/ruoyi-mysql
+ExecStartPre=+/bin/rm -f /run/ruoyi-mysql/mysql.sock.lock
+ExecStart=/www/server/mysql/bin/mysqld --no-defaults \
+    --user=mysql \
+    --basedir=/www/server/mysql \
+    --datadir=/var/lib/ruoyi-mysql \
+    --socket=/run/ruoyi-mysql/mysql.sock \
+    --pid-file=/run/ruoyi-mysql/mysqld.pid \
+    --port=3307 --bind-address=127.0.0.1 \
+    --innodb-buffer-pool-size=64M \
+    --innodb-log-file-size=32M \
+    --performance-schema=OFF \
+    --max-connections=60 \
+    --key-buffer-size=8M \
+    --table-open-cache=64 \
+    --log-error=/var/log/ruoyi-mysql/error.log
+
+# 就绪门禁：mysqld 进程起来 != 能服务。只有 mysqladmin ping 成功才算 start 完成，
+# 这样 2ke-hub-mysql / 2ke-dispatcher / ruoyi-app 的 After=ruoyi-mysql.service 才有意义。
+# 90s 仍未就绪 → exit 1 → 交给 Restart=always 重试（而不是把"崩着"当成"已启动"）。
+ExecStartPost=+/bin/bash -c 'for i in $(seq 1 90); do /www/server/mysql/bin/mysqladmin --socket=/run/ruoyi-mysql/mysql.sock ping >/dev/null 2>&1 && { echo "ruoyi-mysql ready after ${i}s"; exit 0; }; sleep 1; done; echo "ruoyi-mysql NOT ready after 90s" >&2; exit 1'
+# ExecStartPost 最长要跑 90s，必须把默认 90s 的启动超时放宽，否则会被 systemd 判超时杀掉
+TimeoutStartSec=180
+Restart=always
+RestartSec=10
+LimitNOFILE=8192
+
+[Install]
+WantedBy=multi-user.target

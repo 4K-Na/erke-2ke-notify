@@ -1,0 +1,16 @@
+[Unit]
+Description=Site Total Service
+After=network.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory=/www/server/site_total
+ExecStart=/www/server/site_total/site_total
+Restart=always
+RestartSec=5
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target

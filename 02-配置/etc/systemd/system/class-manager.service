@@ -1,0 +1,17 @@
+[Unit]
+Description=Class Manager Next.js App
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/www/wwwroot/class-manager-app/current
+Environment=NODE_ENV=production
+Environment=PORT=3201
+EnvironmentFile=/www/wwwroot/class-manager-app/shared/.env
+ExecStart=/usr/bin/npm start -- --port 3201
+Restart=always
+RestartSec=5
+User=root
+
+[Install]
+WantedBy=multi-user.target

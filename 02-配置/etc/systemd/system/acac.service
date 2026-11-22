@@ -1,0 +1,16 @@
+[Unit]
+Description=ACAC home air conditioner cloud service
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/acac/server
+ExecStart=/usr/bin/java -Xms16m -Xmx96m -XX:MaxMetaspaceSize=64m --add-modules jdk.httpserver -cp build cn.lzy.aircloud.AirCloudServer
+Restart=always
+RestartSec=3
+MemoryMax=160M
+CPUQuota=20%
+
+[Install]
+WantedBy=multi-user.target
