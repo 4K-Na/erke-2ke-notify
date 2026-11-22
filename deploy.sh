@@ -41,7 +41,7 @@ log "开始部署：$DB_NAME@$DB_PORT，域名 $DOMAIN"
 log "步骤 1/9 检查系统依赖"
 MISSING=()
 for c in curl git nginx python3 pip3; do
-    command -v $c >/dev/null 2>&1 || MISSING+=($c)
+    command -v $c >/dev/null 2>&1 || MISSING+=("$c")
 done
 if [ ${#MISSING[@]} -gt 0 ]; then
     warn "缺少: ${MISSING[*]}"
@@ -76,7 +76,11 @@ fi
 # ============================================================
 log "步骤 2/9 安装 Python 依赖"
 pip3 install --quiet --break-system-packages -r "$ROOT/01-代码/requirements.txt" 2>&1 | grep -v WARNING || true
-python3 -c "import pymysql, cryptography" && ok "pymysql / cryptography 已装" || die "Python 依赖安装失败"
+if python3 -c "import pymysql, cryptography" 2>/dev/null; then
+    ok "pymysql / cryptography 已装"
+else
+    die "Python 依赖安装失败"
+fi
 
 # ============================================================
 # 3. 运行用户
